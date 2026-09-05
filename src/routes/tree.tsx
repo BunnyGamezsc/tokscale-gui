@@ -4,6 +4,7 @@ import {
   Link,
   Outlet,
 } from "@tanstack/react-router";
+import { Probe } from "./probe";
 
 /** Sidebar destinations. P1 ships Overview, Models, Daily and Stats; the rest
  *  arrive in P2. Order mirrors upstream tokscale's tab order. */
@@ -12,6 +13,9 @@ const NAV = [
   { path: "/models", label: "Models" },
   { path: "/daily", label: "Daily" },
   { path: "/stats", label: "Stats" },
+  // Ticket 08's measurement harness. Not a product destination; it comes out
+  // when the real command surface lands.
+  { path: "/probe", label: "Scan probe" },
 ] as const;
 
 function Shell() {
@@ -68,7 +72,7 @@ const routes = NAV.map(({ path, label }) =>
   createRoute({
     getParentRoute: () => rootRoute,
     path,
-    component: () => <Placeholder name={label} />,
+    component: path === "/probe" ? Probe : () => <Placeholder name={label} />,
   }),
 );
 

@@ -24,6 +24,11 @@ declare module "@tanstack/react-router" {
   }
 }
 
+// Ticket 08: the scan probe runs itself on mount, so the app boots straight
+// into it rather than waiting for someone to navigate. Remove this together
+// with the /probe route once the real command surface lands.
+router.navigate({ to: "/probe" });
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
