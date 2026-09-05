@@ -1,0 +1,3 @@
+[submodule "vendor/tokscale"]
+	path = vendor/tokscale
+	url = git@github.com:BunnyGamezsc/tokscale.git
