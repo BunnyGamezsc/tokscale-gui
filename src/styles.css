@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* Placeholder tokens only. The real palette is decided by ticket 06
+   ("Establish the design system and soft palette") — do not treat these
+   values as settled. */
+@theme {
+  --color-surface: oklch(0.98 0.004 90);
+  --color-surface-raised: oklch(1 0 0);
+  --color-border: oklch(0.91 0.004 90);
+  --color-fg: oklch(0.27 0.01 80);
+  --color-fg-muted: oklch(0.55 0.008 80);
+  --color-accent: oklch(0.62 0.11 250);
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-surface: oklch(0.21 0.006 80);
+    --color-surface-raised: oklch(0.25 0.006 80);
+    --color-border: oklch(0.32 0.006 80);
+    --color-fg: oklch(0.93 0.004 90);
+    --color-fg-muted: oklch(0.66 0.006 85);
+  }
+}
+
+/* Vibrancy requires the page to be transparent so NSVisualEffectView shows
+   through. See ticket 03's findings. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  color: var(--color-fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Figures must not shift width as they tick. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

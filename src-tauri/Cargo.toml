@@ -1,0 +1,26 @@
+[package]
+name = "tokscale-gui"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "tokscale_gui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# The forked tokscale, vendored at vendor/tokscale. `tokscale-core` carries the
+# scanning/aggregation/pricing engine; `tokscale-cli`'s library target (which
+# only exists in the fork — see ADR 0002) carries auth and sync for P3.
+tokscale-core = { path = "../vendor/tokscale/crates/tokscale-core" }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

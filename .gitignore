@@ -5,3 +5,4 @@ target/
 *.log
 .env
 .env.local
+src-tauri/gen/schemas/
