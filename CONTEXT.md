@@ -59,7 +59,7 @@ fallbacks and local overrides. Supports tiered rates and discounted cache tokens
 how rows are sorted.
 
 **Entry** — one row of an aggregated report. Its identity is determined entirely by the
-active Group-By.
+active Group-By and the active Report Filter.
 
 **Bucket Timezone** — the named IANA zone that decides which calendar day a message
 falls in. Pinned on first scan, because a fixed UTC offset cannot follow DST and would
@@ -67,6 +67,18 @@ re-split usage near the day boundary twice a year.
 
 **Scan** — walking every enabled client's data locations and parsing transcripts into
 Unified Messages. **Source** — one such data location.
+
+**Snapshot** — the corpus of Unified Messages produced by one Scan and held for reports to
+be aggregated from. A Snapshot is replaced only by another Scan; it does not expire.
+
+**Abandon** — to stop waiting for a Scan's result. Deliberately not "cancel": the Scan
+itself continues to completion and still writes its cache, so an abandoned Scan leaves the
+next one warm. Nothing partial is left behind, and nothing is undone.
+
+**Report Filter** — the client, date-range and year constraints applied to Unified Messages
+*before* aggregation. Not a row filter: narrowing a Report Filter changes what each Entry
+means, not which Entries are displayed. Distinct from sorting and from column filtering,
+which act on Entries after the fact.
 
 ## Two meanings of "usage"
 
