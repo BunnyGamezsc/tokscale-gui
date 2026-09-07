@@ -96,3 +96,20 @@ export function useClients(ready: boolean) {
     staleTime: Infinity,
   });
 }
+
+export function useUnpriced(ready: boolean) {
+  return useQuery({
+    queryKey: ["unpriced"],
+    queryFn: () => api.unpriced(),
+    enabled: ready,
+    staleTime: Infinity,
+  });
+}
+
+export function useCustomPricing() {
+  return useQuery({
+    queryKey: ["custom_pricing"],
+    queryFn: () => api.customPricing(),
+    staleTime: Infinity,
+  });
+}

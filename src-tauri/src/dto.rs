@@ -125,3 +125,20 @@ pub struct Client {
     pub messages: i32,
     pub cost: f64,
 }
+
+/// A model that spent tokens but produced no cost — a candidate for a manual
+/// rate. Token totals are carried so the user can see which row is worth
+/// pricing first.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Unpriced {
+    pub model: String,
+    pub provider: String,
+    pub clients: Vec<String>,
+    pub input: i64,
+    pub output: i64,
+    pub cache_read: i64,
+    pub cache_write: i64,
+    pub messages: i32,
+    pub cost: f64,
+}

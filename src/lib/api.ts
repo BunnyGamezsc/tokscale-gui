@@ -97,3 +97,35 @@ export const graphReport = (filter?: Filter) => invoke<Day[]>("graph_report", { 
 export const clients = () => invoke<Client[]>("clients");
 
 export const settings = () => invoke<unknown>("settings");
+
+/** A model that spent tokens but produced no cost. */
+export interface Unpriced {
+  model: string;
+  provider: string;
+  clients: string[];
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  messages: number;
+  cost: number;
+}
+
+/** Manual rates, in dollars per million tokens — the unit vendors quote and the
+ *  unit `custom-pricing.json` stores. */
+export interface Rates {
+  input: number | null;
+  output: number | null;
+  cacheRead: number | null;
+  cacheWrite: number | null;
+}
+
+export const unpriced = () => invoke<Unpriced[]>("unpriced");
+
+export const customPricing = () => invoke<Record<string, Rates>>("custom_pricing");
+
+export const setCustomPricing = (model: string, rates: Rates) =>
+  invoke<void>("set_custom_pricing", { model, rates });
+
+export const clearCustomPricing = (model: string) =>
+  invoke<void>("clear_custom_pricing", { model });

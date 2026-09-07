@@ -18,7 +18,7 @@ use tokscale_core::{
     WorktreeRollup,
 };
 
-use crate::dto::{Client, Day, Entry, Report, ScanSummary};
+use crate::dto::{Client, Day, Entry, Report, ScanSummary, Unpriced};
 
 /// The Snapshot: the corpus of Unified Messages produced by one Scan, held for
 /// reports to be aggregated from. Replaced only by another Scan; it does not
@@ -115,9 +115,29 @@ pub async fn scan(
 
     let messages = blocking(move || {
         tauri::async_runtime::block_on(async move {
-            let pricing = PricingService::get_or_init().await.ok();
-            parse_local_unified_messages_with_pricing(filter.parse_options(), pricing.as_deref())
-                .await
+            // A forced rescan re-reads the manual pricing overrides. The cached
+            // service would not: it reads `custom-pricing.json` once per launch,
+            // so a rate entered in this session would not show up until restart.
+            match crate::pricing::reloaded() {
+                Some(fresh) => {
+                    parse_local_unified_messages_with_pricing(
+                        filter.parse_options(),
+                        Some(&fresh),
+                    )
+                    .await
+                }
+                None => {
+                    // No upstream pricing cached on disk yet, so this is the
+                    // first scan: fetch through the shared service, which also
+                    // populates those caches for the branch above.
+                    let pricing = PricingService::get_or_init().await.ok();
+                    parse_local_unified_messages_with_pricing(
+                        filter.parse_options(),
+                        pricing.as_deref(),
+                    )
+                    .await
+                }
+            }
         })
     })
     .await?;
@@ -267,4 +287,55 @@ pub async fn settings() -> Result<serde_json::Value, String> {
         }
     })
     .await
+}
+
+/// Models carrying tokens but no cost.
+///
+/// There is no per-Entry Cost Source to read — `ModelUsage` does not carry one —
+/// so "unpriced" is reconstructed the way upstream reconstructs it: tokens were
+/// spent and the computed cost is still zero. That is exactly the set a manual
+/// rate is for.
+#[tauri::command]
+pub async fn unpriced(state: tauri::State<'_, Snapshot>) -> Result<Vec<Unpriced>, String> {
+    let messages = {
+        let guard = state.0.lock().map_err(|_| "snapshot lock poisoned")?;
+        guard
+            .as_ref()
+            .ok_or("no snapshot: run a scan first")?
+            .clone()
+    };
+
+    let mut by_model: std::collections::BTreeMap<String, Unpriced> = Default::default();
+    for m in &messages {
+        let entry = by_model
+            .entry(m.model_id.clone())
+            .or_insert_with(|| Unpriced {
+                model: m.model_id.clone(),
+                provider: m.provider_id.clone(),
+                clients: Vec::new(),
+                input: 0,
+                output: 0,
+                cache_read: 0,
+                cache_write: 0,
+                messages: 0,
+                cost: 0.0,
+            });
+        entry.input += m.tokens.input;
+        entry.output += m.tokens.output;
+        entry.cache_read += m.tokens.cache_read;
+        entry.cache_write += m.tokens.cache_write;
+        entry.messages += m.message_count;
+        entry.cost += m.cost;
+        if !entry.clients.contains(&m.client) {
+            entry.clients.push(m.client.clone());
+        }
+    }
+
+    let mut out: Vec<Unpriced> = by_model
+        .into_values()
+        .filter(|u| u.cost <= 0.0 && u.input + u.output + u.cache_read + u.cache_write > 0)
+        .collect();
+    // Most tokens first: that is the row where a rate is worth the most.
+    out.sort_by_key(|u| std::cmp::Reverse(u.input + u.output + u.cache_read + u.cache_write));
+    Ok(out)
 }

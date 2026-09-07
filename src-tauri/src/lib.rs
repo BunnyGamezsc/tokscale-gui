@@ -29,6 +29,7 @@ use tauri::Manager;
 
 mod commands;
 mod dto;
+mod pricing;
 
 /// How long the backend waits for the frontend to show the window itself.
 /// Comfortably longer than a cold webview start, short enough that a user who
@@ -61,6 +62,10 @@ pub fn run() {
             commands::graph_report,
             commands::clients,
             commands::settings,
+            commands::unpriced,
+            pricing::custom_pricing,
+            pricing::set_custom_pricing,
+            pricing::clear_custom_pricing,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
