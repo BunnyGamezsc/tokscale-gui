@@ -48,8 +48,11 @@ fn path() -> PathBuf {
 /// to clobber a file it could not read — silently treating a broken file as
 /// empty is how a user's hand-written tiers get erased.
 fn read_file() -> Result<Option<Value>, String> {
-    let p = path();
-    match std::fs::read_to_string(&p) {
+    read_at(&path())
+}
+
+fn read_at(p: &std::path::Path) -> Result<Option<Value>, String> {
+    match std::fs::read_to_string(p) {
         Ok(text) => serde_json::from_str(&text)
             .map(Some)
             .map_err(|e| format!("{} did not parse, so it was left untouched: {e}", p.display())),
@@ -112,10 +115,21 @@ pub async fn set_custom_pricing(model: String, rates: Rates) -> Result<(), Strin
         }
     }
 
-    let mut doc = read_file()?.unwrap_or_else(|| Value::Object(Map::new()));
+    let doc = read_file()?.unwrap_or_else(|| Value::Object(Map::new()));
+    write_file(&merged(doc, &model, &rates)?)
+}
+
+/// Applies one model's rates to the document, leaving everything else alone.
+///
+/// Separated from the IO because this is where the format's sharp edges live:
+/// an existing entry is merged into rather than replaced, so tiered rates and
+/// per-token spellings this form cannot edit survive a save, and a model whose
+/// last rate is cleared drops out of the file entirely instead of lingering as
+/// an empty object that core would read as "priced at nothing".
+fn merged(mut doc: Value, model: &str, rates: &Rates) -> Result<Value, String> {
     let mut models = models_of(&doc);
     let mut entry = models
-        .get(&model)
+        .get(model)
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
@@ -137,16 +151,15 @@ pub async fn set_custom_pricing(model: String, rates: Rates) -> Result<(), Strin
     }
 
     if entry.is_empty() {
-        models.remove(&model);
+        models.remove(model);
     } else {
-        models.insert(model, Value::Object(entry));
+        models.insert(model.to_string(), Value::Object(entry));
     }
 
     doc.as_object_mut()
         .ok_or("custom-pricing.json is not a JSON object")?
         .insert("models".into(), Value::Object(models));
-
-    write_file(&doc)
+    Ok(doc)
 }
 
 /// Drops a model's manual rates entirely, so it falls back to upstream pricing.
@@ -244,6 +257,99 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn rates(input: Option<f64>, output: Option<f64>) -> Rates {
+        Rates {
+            input,
+            output,
+            ..Default::default()
+        }
+    }
+
+    /// The reason saving merges instead of replacing. `custom-pricing.json`
+    /// carries tiered rates and per-token spellings that the four-field form
+    /// cannot express; a save must not be the thing that deletes them.
+    #[test]
+    fn saving_preserves_keys_the_form_cannot_edit() {
+        let doc = serde_json::json!({
+            "models": {
+                "m": {
+                    INPUT_KEY: 1.0,
+                    "input_cost_per_million_tokens_above_200k_tokens": 2.0,
+                    "output_cost_per_token": 0.000003,
+                }
+            }
+        });
+
+        let out = merged(doc, "m", &rates(Some(5.0), None)).unwrap();
+        let entry = &out["models"]["m"];
+
+        assert_eq!(entry[INPUT_KEY], 5.0, "the edited field is replaced");
+        assert_eq!(
+            entry["input_cost_per_million_tokens_above_200k_tokens"], 2.0,
+            "a tier the form cannot show must survive"
+        );
+        assert_eq!(
+            entry["output_cost_per_token"], 0.000003,
+            "a per-token spelling must survive"
+        );
+    }
+
+    /// Another model's rates are none of this save's business.
+    #[test]
+    fn saving_leaves_other_models_alone() {
+        let doc = serde_json::json!({ "models": { "other": { INPUT_KEY: 9.0 } } });
+        let out = merged(doc, "m", &rates(Some(1.0), None)).unwrap();
+        assert_eq!(out["models"]["other"][INPUT_KEY], 9.0);
+        assert_eq!(out["models"]["m"][INPUT_KEY], 1.0);
+    }
+
+    /// Clearing every field drops the model rather than leaving `{}` behind,
+    /// which core would read as an entry that prices nothing.
+    #[test]
+    fn clearing_every_field_removes_the_model() {
+        let doc = serde_json::json!({ "models": { "m": { INPUT_KEY: 1.0 } } });
+        let out = merged(doc, "m", &Rates::default()).unwrap();
+        assert!(
+            out["models"].as_object().unwrap().is_empty(),
+            "model should be gone, got {out}"
+        );
+    }
+
+    /// Zero is a rate. Round-tripping it through a save must not turn it into
+    /// an absent rate, which would send the model back to upstream pricing.
+    #[test]
+    fn zero_is_written_not_dropped() {
+        let doc = serde_json::json!({});
+        let out = merged(doc, "m", &rates(Some(0.0), Some(0.0))).unwrap();
+        assert_eq!(out["models"]["m"][INPUT_KEY], 0.0);
+        assert_eq!(out["models"]["m"][OUTPUT_KEY], 0.0);
+    }
+
+    /// A file that exists but does not parse is an error, not an empty default.
+    /// Every write path starts from `read_at`, so returning `Ok(None)` here is
+    /// what would let a save erase someone's hand-written tiers.
+    #[test]
+    fn an_unparseable_file_is_an_error_not_an_empty_default() {
+        let dir = std::env::temp_dir().join(format!("tokscale-gui-broken-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("custom-pricing.json");
+        std::fs::write(&path, "{ this is not json").unwrap();
+
+        let err = read_at(&path).expect_err("a broken file must not read as empty");
+        assert!(err.contains("did not parse"), "unhelpful message: {err}");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// An absent file is normal, and must read as empty rather than as an error
+    /// — otherwise the Pricing view cannot open before the first rate is set.
+    #[test]
+    fn an_absent_file_reads_as_empty() {
+        let path = std::env::temp_dir().join("tokscale-gui-definitely-absent.json");
+        std::fs::remove_file(&path).ok();
+        assert!(read_at(&path).unwrap().is_none());
     }
 
     /// Zero is a rate, not an absent rate: it means the model is free, and core
