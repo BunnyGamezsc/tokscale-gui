@@ -339,3 +339,148 @@ pub async fn unpriced(state: tauri::State<'_, Snapshot>) -> Result<Vec<Unpriced>
     out.sort_by_key(|u| std::cmp::Reverse(u.input + u.output + u.cache_read + u.cache_write));
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    //! Ticket 11's evidence. These pin what a Report Filter can and cannot do
+    //! against the *held* Snapshot, which is the whole question of whether
+    //! narrowing re-aggregates or rescans.
+
+    use super::*;
+    use tokscale_core::TokenBreakdown;
+
+    fn msg(client: &str, model: &str, date: &str, cost: f64) -> UnifiedMessage {
+        UnifiedMessage {
+            client: client.to_string(),
+            model_id: model.to_string(),
+            provider_id: "anthropic".to_string(),
+            session_id: "s1".to_string(),
+            workspace_key: None,
+            workspace_label: None,
+            timestamp: 0,
+            date: date.to_string(),
+            tokens: TokenBreakdown {
+                input: 100,
+                output: 10,
+                cache_read: 0,
+                cache_write: 0,
+                reasoning: 0,
+            },
+            cost,
+            cost_source: Default::default(),
+            duration_ms: None,
+            message_count: 1,
+            agent: None,
+            dedup_key: None,
+            session_title: None,
+            is_turn_start: false,
+            model_attribution_conflicted: false,
+        }
+    }
+
+    fn corpus() -> Vec<UnifiedMessage> {
+        vec![
+            msg("claude-code", "sonnet", "2026-08-01", 1.0),
+            msg("codex", "sonnet", "2026-08-15", 2.0),
+            msg("claude-code", "sonnet", "2026-09-01", 4.0),
+        ]
+    }
+
+    /// `since` and `until` are inclusive on both ends, and compared as plain
+    /// `YYYY-MM-DD` strings against the message's already-bucketed `date`. So a
+    /// date range needs no timezone arithmetic on the frontend: the Bucket
+    /// Timezone was applied when the message was parsed, and a range is two day
+    /// strings.
+    #[test]
+    fn a_date_range_is_two_inclusive_day_strings() {
+        let f = Filter {
+            since: Some("2026-08-01".into()),
+            until: Some("2026-08-15".into()),
+            ..Default::default()
+        };
+        let kept = filter_messages_for_report(corpus(), &f.report_options(GroupBy::Model));
+        assert_eq!(kept.len(), 2, "both boundary days must be inside the range");
+        assert_eq!(kept[0].date, "2026-08-01");
+        assert_eq!(kept[1].date, "2026-08-15");
+    }
+
+    /// The finding ticket 11 turns on: core's *report-time* predicate consults
+    /// `year`, `since` and `until` only. `clients` is a **scan-time** selector —
+    /// it chooses which client parsers run — so sending it to `model_report`,
+    /// which re-aggregates a Snapshot that is already parsed, does nothing at
+    /// all. The seam is typed but silently inert on this path.
+    #[test]
+    fn a_client_narrowing_is_inert_against_the_held_snapshot() {
+        let f = Filter {
+            clients: Some(vec!["claude-code".into()]),
+            ..Default::default()
+        };
+        let kept = filter_messages_for_report(corpus(), &f.report_options(GroupBy::Model));
+        assert_eq!(
+            kept.len(),
+            3,
+            "core's report filter ignores `clients`; every message survives"
+        );
+    }
+
+    /// Why a Report Filter cannot be a table filter (CONTEXT.md: **Report
+    /// Filter**). Under `model`, one Entry pools every Client that ran that
+    /// model, and the pooled row carries no client breakdown. Dropping rows
+    /// after aggregation therefore cannot answer "just claude-code" — the
+    /// narrowing has to happen to Unified Messages, before they are pooled.
+    #[test]
+    fn narrowing_by_client_cannot_be_done_after_aggregation() {
+        let all = aggregate_model_usage_entries_with_rollup(
+            corpus(),
+            &GroupBy::Model,
+            WorktreeRollup::default(),
+        );
+        assert_eq!(all.len(), 1, "one model, so one pooled Entry");
+        let pooled = all[0].cost;
+
+        let narrowed: Vec<UnifiedMessage> = corpus()
+            .into_iter()
+            .filter(|m| m.client == "claude-code")
+            .collect();
+        let before = aggregate_model_usage_entries_with_rollup(
+            narrowed,
+            &GroupBy::Model,
+            WorktreeRollup::default(),
+        );
+        assert_eq!(before.len(), 1);
+
+        // 5.0 against 7.0: the difference is codex's share, and nothing in the
+        // pooled Entry says which 2.0 of it to remove.
+        assert!(
+            (before[0].cost - 5.0).abs() < 1e-9 && (pooled - 7.0).abs() < 1e-9,
+            "pooled {pooled}, narrowed {}",
+            before[0].cost
+        );
+    }
+
+    /// Not a test — a timing probe, run by hand:
+    /// `cargo test --lib -- --ignored --nocapture graph_report_cost`
+    ///
+    /// The global Report Filter drives `graph_report` too, and `graph_report`
+    /// re-enters the parse rather than reading the Snapshot. Ticket 09 measured
+    /// that at ~0.9 s; the 2026-09-06 handoff flags the figure as stale, and a
+    /// global filter is only usable on Daily and Stats if it is still about
+    /// that. This prints the real number against the real corpus.
+    #[test]
+    #[ignore]
+    fn graph_report_cost() {
+        let run = |label: &str| {
+            let started = Instant::now();
+            let out = tauri::async_runtime::block_on(generate_local_graph_report(
+                Filter::default().report_options(GroupBy::Model),
+            ));
+            let ms = started.elapsed().as_millis();
+            match out {
+                Ok(r) => println!("{label}: {ms} ms, {} days", r.contributions.len()),
+                Err(e) => println!("{label}: {ms} ms, failed: {e}"),
+            }
+        };
+        run("graph_report cold");
+        run("graph_report warm");
+    }
+}
