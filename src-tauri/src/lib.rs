@@ -2,8 +2,7 @@
 //!
 //! Data comes from `tokscale-core` in-process (ADR 0001).
 //!
-//! The command surface is designed by ticket 09 and is not built yet. What it
-//! decided, so the next session does not have to re-read the issue:
+//! The command surface designed by ticket 09 now lives in `commands`:
 //!
 //! - Five commands, all `async` and all dispatched onto `spawn_blocking`:
 //!   `scan`, `model_report`, `graph_report`, `clients`, `settings`.
@@ -11,8 +10,10 @@
 //!   commands re-aggregate from that snapshot rather than rescanning.
 //! - Progress is a `scan:progress` Tauri event, emitted around the discovery
 //!   phase only.
-//! - camelCase across the whole boundary, with `tauri-specta` generating the
-//!   TypeScript from `#[derive(specta::Type)]` in the forked core.
+//! - camelCase across the whole boundary. Ticket 09 planned to get that from
+//!   `#[derive(specta::Type)]` in the forked core; building it showed P1 reads
+//!   15 fields rather than the ~150 that made GUI-side DTOs look expensive, so
+//!   the boundary is declared in `dto` instead. See that module.
 //!
 //! Ticket 08's scan probe and ticket 14's threading bench both lived here and
 //! have been removed; their measurements are recorded on the issues.
@@ -25,6 +26,9 @@
 use std::time::Duration;
 
 use tauri::Manager;
+
+mod commands;
+mod dto;
 
 /// How long the backend waits for the frontend to show the window itself.
 /// Comfortably longer than a cold webview start, short enough that a user who
@@ -50,7 +54,14 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![])
+        .manage(commands::Snapshot::default())
+        .invoke_handler(tauri::generate_handler![
+            commands::scan,
+            commands::model_report,
+            commands::graph_report,
+            commands::clients,
+            commands::settings,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -5,14 +5,18 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { OverviewView } from "@/views/overview";
+import { ModelsView } from "@/views/models";
+import { DailyView } from "@/views/daily";
+import { StatsView } from "@/views/stats";
 
 /** Sidebar destinations. P1 ships Overview, Models, Daily and Stats; the rest
  *  arrive in P2. Order mirrors upstream tokscale's tab order. */
 const NAV = [
-  { path: "/", label: "Overview" },
-  { path: "/models", label: "Models" },
-  { path: "/daily", label: "Daily" },
-  { path: "/stats", label: "Stats" },
+  { path: "/", label: "Overview", component: OverviewView },
+  { path: "/models", label: "Models", component: ModelsView },
+  { path: "/daily", label: "Daily", component: DailyView },
+  { path: "/stats", label: "Stats", component: StatsView },
 ] as const;
 
 /** The shell in the register ticket 07 settled: one flat plane, hairlines doing
@@ -59,24 +63,8 @@ function Shell() {
 
 const rootRoute = createRootRoute({ component: Shell });
 
-function Placeholder({ name }: { name: string }) {
-  return (
-    <div>
-      <h1 className="text-title font-semibold tracking-[-0.01em]">{name}</h1>
-      <p className="mt-2 max-w-[60ch] text-muted-foreground">
-        Not built yet. The command surface behind these views is decided by
-        ticket 09; this route exists so the shell is navigable.
-      </p>
-    </div>
-  );
-}
-
-const routes = NAV.map(({ path, label }) =>
-  createRoute({
-    getParentRoute: () => rootRoute,
-    path,
-    component: () => <Placeholder name={label} />,
-  }),
+const routes = NAV.map(({ path, component }) =>
+  createRoute({ getParentRoute: () => rootRoute, path, component }),
 );
 
 export const routeTree = rootRoute.addChildren(routes);
