@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routes/tree";
+import { initTheme } from "./theme";
 import "./styles.css";
 
 const queryClient = new QueryClient({
@@ -31,3 +32,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+
+// The window is created hidden so its NSAppearance is right before the first
+// frame; this sets the theme and then shows it. The stored preference lands
+// here once `gui.json` is readable (ticket 09's settings command).
+void initTheme();

@@ -1,48 +1,233 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist-mono";
 
-/* Placeholder tokens only. The real palette is decided by ticket 06
-   ("Establish the design system and soft palette") — do not treat these
-   values as settled. */
-@theme {
-  --color-surface: oklch(0.98 0.004 90);
-  --color-surface-raised: oklch(1 0 0);
-  --color-border: oklch(0.91 0.004 90);
-  --color-fg: oklch(0.27 0.01 80);
-  --color-fg-muted: oklch(0.55 0.008 80);
-  --color-accent: oklch(0.62 0.11 250);
-}
+/* Dark is a *window* state, not a class the page invents. `windowEffects`
+   materials follow the window's NSAppearance, so the palette has to key off the
+   same flag the Rust-side `set_theme` writes — see `theme.ts`. Keying shadcn's
+   dark variant off `[data-theme]` is what keeps the vibrant sidebar and the
+   content from desyncing. */
+@custom-variant dark (&:is([data-theme="dark"], [data-theme="dark"] *));
+
+/* ── Palette ────────────────────────────────────────────────────────────────
+   Warm stone base (hue 75-80 in oklch), low contrast, one chromatic accent:
+   a muted azure pulled from tokscale's #0073FF — oklch(0.589 0.226 259) — by
+   cutting chroma roughly in half and walking the hue 11 degrees warmer, so it
+   sits inside the stone rather than on top of it.
+
+   The accent is spent in exactly two places: the primary action, and the
+   Contribution Graph Ramp. Nothing else on the page is saturated, so the graph
+   reads as the one chromatic event in the window.                          */
 
 :root {
   color-scheme: light dark;
+
+  --background: oklch(0.968 0.004 80);
+  --foreground: oklch(0.300 0.010 70);
+  --card: oklch(0.995 0.002 80);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.995 0.002 80);
+  --popover-foreground: var(--foreground);
+
+  --primary: oklch(0.545 0.115 250);
+  --primary-foreground: oklch(0.99 0.002 250);
+  --secondary: oklch(0.945 0.005 80);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.945 0.005 80);
+  --muted-foreground: oklch(0.505 0.008 75);
+  --accent: oklch(0.930 0.030 248);
+  --accent-foreground: oklch(0.420 0.110 250);
+  --destructive: oklch(0.545 0.155 27);
+
+  --border: oklch(0.895 0.006 80);
+  --input: oklch(0.895 0.006 80);
+  --ring: oklch(0.545 0.115 250);
+
+  --radius: 0.5rem;
+
+  /* The sidebar sits over an NSVisualEffectView. Its token is a scrim, not a
+     color: anything opaque here throws the vibrancy away. */
+  --sidebar: oklch(0.99 0.003 80 / 0.42);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.945 0.005 80 / 0.7);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: oklch(0.895 0.006 80 / 0.6);
+  --sidebar-ring: var(--ring);
+
+  /* Cost Source. A displayed cost is only as trustworthy as its provenance
+     (CONTEXT.md), so the figure itself carries the signal — no badge needed.
+     ProviderReported is plain `--foreground` and gets no token. */
+  --cost-estimated: oklch(0.560 0.085 70);
+  --cost-unknown: oklch(0.630 0.007 78);
+
+  /* Contribution Graph Ramp: five intensity steps, walked in oklch from the
+     accent's hue. Lightness descends and chroma climbs together, so the steps
+     separate for a dichromat by lightness alone. `--ramp-0` is not a step —
+     a day with no usage is absence, and it holds the surface. */
+  --ramp-0: oklch(0.958 0.003 80);
+  --ramp-1: oklch(0.905 0.030 248);
+  --ramp-2: oklch(0.809 0.056 248);
+  --ramp-3: oklch(0.713 0.083 248);
+  --ramp-4: oklch(0.616 0.109 248);
+  --ramp-5: oklch(0.520 0.135 248);
+
+  /* Type scale. Six sizes, and P1 uses no others. A desktop instrument reads at
+     arm's length on a Retina panel, so the body size is 13px — the macOS system
+     size. Note that `figure` outranks `title`: on every view the number is the
+     thing the user came for, and the heading is only signposting. */
+  --size-micro: 0.6875rem; /* 11px — column heads, unit labels             */
+  --size-small: 0.75rem;   /* 12px — secondary text, timestamps            */
+  --size-body: 0.8125rem;  /* 13px — default UI text, table cells          */
+  --size-title: 1rem;      /* 16px — view title                            */
+  --size-figure: 1.0625rem;/* 17px — summary-tile figures                  */
+  --size-display: 1.875rem;/* 30px — the single headline figure per view    */
+
+  /* Density. Rows are 27px because every Group-By yields 38-198 Entries and the
+     whole report should fit one window; the rhythm is a 4px grid, with 24px as
+     the content gutter. */
+  --row-h: 1.6875rem;      /* 27px */
+  --gutter: 1.5rem;        /* 24px */
 }
 
-@media (prefers-color-scheme: dark) {
-  @theme {
-    --color-surface: oklch(0.21 0.006 80);
-    --color-surface-raised: oklch(0.25 0.006 80);
-    --color-border: oklch(0.32 0.006 80);
-    --color-fg: oklch(0.93 0.004 90);
-    --color-fg-muted: oklch(0.66 0.006 85);
+[data-theme="dark"] {
+  --background: oklch(0.205 0.006 75);
+  --foreground: oklch(0.930 0.004 85);
+  --card: oklch(0.245 0.006 75);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.245 0.006 75);
+  --popover-foreground: var(--foreground);
+
+  --primary: oklch(0.660 0.100 248);
+  --primary-foreground: oklch(0.180 0.010 250);
+  --secondary: oklch(0.285 0.006 75);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.285 0.006 75);
+  --muted-foreground: oklch(0.700 0.006 80);
+  --accent: oklch(0.340 0.048 248);
+  --accent-foreground: oklch(0.860 0.060 248);
+  --destructive: oklch(0.680 0.160 27);
+
+  --border: oklch(0.320 0.006 75);
+  --input: oklch(0.320 0.006 75);
+  --ring: oklch(0.660 0.100 248);
+
+  --sidebar: oklch(0.180 0.006 75 / 0.30);
+  --sidebar-accent: oklch(0.285 0.006 75 / 0.7);
+  --sidebar-border: oklch(0.320 0.006 75 / 0.6);
+
+  --cost-estimated: oklch(0.720 0.075 70);
+  --cost-unknown: oklch(0.560 0.006 80);
+
+  --ramp-0: oklch(0.240 0.005 75);
+  --ramp-1: oklch(0.300 0.040 248);
+  --ramp-2: oklch(0.405 0.064 248);
+  --ramp-3: oklch(0.510 0.087 248);
+  --ramp-4: oklch(0.615 0.111 248);
+  --ramp-5: oklch(0.720 0.135 248);
+}
+
+@theme inline {
+  /* SF is the right voice for a window that lives beside Finder; Geist Mono is
+     here for figures, where a mono advance beats a proportional one even with
+     `tabular-nums` on. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui,
+    sans-serif;
+  /* Load-bearing despite looking like a pure alias: shadcn's CardTitle applies
+     `font-heading`. Headings do not diverge from body here, so it points back at
+     --font-sans rather than being deleted. */
+  --font-heading: var(--font-sans);
+  --font-mono: "Geist Mono Variable", "SF Mono", ui-monospace, Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-cost-estimated: var(--cost-estimated);
+  --color-cost-unknown: var(--cost-unknown);
+  --color-ramp-0: var(--ramp-0);
+  --color-ramp-1: var(--ramp-1);
+  --color-ramp-2: var(--ramp-2);
+  --color-ramp-3: var(--ramp-3);
+  --color-ramp-4: var(--ramp-4);
+  --color-ramp-5: var(--ramp-5);
+
+  /* The type and density scale reach Tailwind as utilities too, so the whole
+     token system is consumed one way: `text-body`, `px-gutter`, `h-row`. */
+  --text-micro: var(--size-micro);
+  --text-small: var(--size-small);
+  --text-body: var(--size-body);
+  --text-title: var(--size-title);
+  --text-figure: var(--size-figure);
+  --text-display: var(--size-display);
+  --spacing-gutter: var(--gutter);
+  --spacing-row: var(--row-h);
+
+  /* Tailwind's default scale is rebound onto the app's, so the shadcn
+     components — which are generated with `text-xs` / `text-sm` / `text-base`
+     and are not ours to restyle — land on it too. Without this, Button and
+     Table quietly introduce a 14px step the scale does not have. */
+  --text-xs: var(--size-micro);
+  --text-sm: var(--size-body);
+  --text-base: var(--size-title);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply text-foreground;
+    font-size: var(--text-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Vibrancy needs the page transparent so the NSVisualEffectView shows
+     through; the content pane paints `--background` itself. */
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    background: transparent;
   }
 }
 
-/* Vibrancy requires the page to be transparent so NSVisualEffectView shows
-   through. See ticket 03's findings. */
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-  background: transparent;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-  color: var(--color-fg);
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Figures must not shift width as they tick. */
-.tabular {
+/* Figures must not shift width as they tick — an elapsed timer, a cost total
+   recomputing on a Group-By switch. Named for the OpenType feature it turns on. */
+@utility tnum {
   font-variant-numeric: tabular-nums;
 }
