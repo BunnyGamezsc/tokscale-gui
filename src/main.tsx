@@ -10,7 +10,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       // Scans are expensive and the data is local; refresh is explicit
-      // (manual or interval) per the map's standing decisions.
+      // (manual or interval) per ROADMAP.md. Interval refresh is not built yet.
       refetchOnWindowFocus: false,
       staleTime: Infinity,
     },
