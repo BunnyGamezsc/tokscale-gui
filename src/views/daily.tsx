@@ -8,14 +8,25 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ViewHeader, Tiles } from "@/components/view";
+import { DetailDialog, useDayDetail } from "@/components/detail";
 import { RowSkeleton } from "@/components/states";
 import { useGraph } from "@/lib/use-scan";
 import { useSnapshot } from "@/views/snapshot";
 import { fmtCost, fmtTokens } from "@/lib/format";
+import { useState } from "react";
 
 export function DailyView() {
   const snap = useSnapshot();
   const graph = useGraph(snap.ready);
+
+  // Upstream's Daily Detail, which is a day broken down by client/provider/model.
+  // Served by `model_report` with `since == until == the date` off the held
+  // Snapshot, not by a second `graph_report`: the day totals agree exactly
+  // (`daily_detail_agrees_with_the_daily_row`), and this way the dialog costs
+  // 41-100 ms instead of re-entering a 1.3-15 s parse.
+  const [day, setDay] = useState<string | null>(null);
+  const detail = useDayDetail(day);
+  const openCost = (graph.data ?? []).find((d) => d.date === day)?.cost;
 
   if (snap.gate) return snap.gate;
 
@@ -53,7 +64,11 @@ export function DailyView() {
             <RowSkeleton cols={4} />
           ) : (
             days.map((d) => (
-              <TableRow key={d.date} className="h-row border-border/50">
+              <TableRow
+                key={d.date}
+                onClick={() => setDay(d.date)}
+                className="h-row cursor-pointer border-border/50"
+              >
                 <TableCell className="py-0 font-mono">{d.date}</TableCell>
                 <TableCell className="tnum py-0 text-right font-mono text-muted-foreground">
                   {fmtTokens(d.tokens)}
@@ -87,6 +102,16 @@ export function DailyView() {
           </TableFooter>
         )}
       </Table>
+
+      {day && (
+        <DetailDialog
+          title={`Daily detail: ${day}`}
+          aside={openCost !== undefined ? fmtCost(openCost) : ""}
+          entries={detail.data?.entries ?? []}
+          pending={detail.isPending}
+          onClose={() => setDay(null)}
+        />
+      )}
     </>
   );
 }

@@ -483,4 +483,130 @@ mod tests {
         run("graph_report cold");
         run("graph_report warm");
     }
+
+    /// Ticket 10's first contract: **a drill-down sums to the row it opened
+    /// from.** A coarser Group-By's Entry decomposes exactly into the finer
+    /// Group-By's Entries that share its key — so "what is this row made of"
+    /// needs no new command and no per-row filter. It is one already-cached
+    /// finer report, read locally.
+    ///
+    /// This is the converse of `narrowing_by_client_cannot_be_done_after_
+    /// aggregation`: you cannot *narrow* a pooled Entry after the fact, but you
+    /// can *explain* it by re-reading the corpus one axis finer.
+    #[test]
+    fn a_finer_group_by_decomposes_a_coarser_entry_exactly() {
+        let corpus = vec![
+            msg("claude-code", "sonnet", "2026-08-01", 1.0),
+            msg("codex", "sonnet", "2026-08-15", 2.0),
+            msg("claude-code", "sonnet", "2026-09-01", 4.0),
+            msg("claude-code", "opus", "2026-09-01", 8.0),
+        ];
+
+        let coarse = aggregate_model_usage_entries_with_rollup(
+            corpus.clone(),
+            &GroupBy::Model,
+            WorktreeRollup::default(),
+        );
+        let fine = aggregate_model_usage_entries_with_rollup(
+            corpus,
+            &"client,provider,model".parse::<GroupBy>().expect("group-by"),
+            WorktreeRollup::default(),
+        );
+
+        assert_eq!(coarse.len(), 2, "two models");
+        assert!(fine.len() > coarse.len(), "finer axis must split at least one row");
+
+        for row in &coarse {
+            let parts: Vec<_> = fine.iter().filter(|f| f.model == row.model).collect();
+            assert!(!parts.is_empty(), "{} has no parts", row.model);
+
+            let cost: f64 = parts.iter().map(|p| p.cost).sum();
+            let messages: i32 = parts.iter().map(|p| p.message_count).sum();
+            let input: i64 = parts.iter().map(|p| p.input).sum();
+
+            assert!(
+                (cost - row.cost).abs() < 1e-9,
+                "{}: parts sum to {cost}, row says {}",
+                row.model,
+                row.cost
+            );
+            assert_eq!(messages, row.message_count, "{}: message count", row.model);
+            assert_eq!(input, row.input, "{}: input tokens", row.model);
+        }
+    }
+
+    /// Ticket 10's second contract, and the one only the real corpus can settle:
+    /// **Daily's detail dialog must agree with the Daily row it opened from.**
+    ///
+    /// The row comes from `graph_report`, which re-enters the parse through
+    /// core's private `GraphSink`. The dialog is served by `model_report` over
+    /// the held Snapshot with `since == until == that day` — 41-100 ms, no
+    /// second `graph_report`, no rescan, and no fork change. That only works if
+    /// the two paths bucket a day identically.
+    ///
+    /// Not a unit test — it walks real disk. Run by hand:
+    /// `cargo test --lib -- --ignored --nocapture daily_detail_agrees`
+    #[test]
+    #[ignore]
+    fn daily_detail_agrees_with_the_daily_row() {
+        // The Snapshot must be built with pricing, exactly as `scan` builds it.
+        // Without it every message costs 0.0 while `graph_report` fetches its
+        // own rates, and the two paths disagree for a reason that has nothing
+        // to do with how a day is bucketed.
+        let snapshot = tauri::async_runtime::block_on(async {
+            let pricing = PricingService::get_or_init().await.ok();
+            parse_local_unified_messages_with_pricing(
+                Filter::default().parse_options(),
+                pricing.as_deref(),
+            )
+            .await
+        })
+        .expect("scan");
+        println!("snapshot: {} messages", snapshot.len());
+
+        let graph = tauri::async_runtime::block_on(generate_local_graph_report(
+            Filter::default().report_options(GroupBy::Model),
+        ))
+        .expect("graph_report");
+
+        let mut checked = 0;
+        let mut worst = 0.0f64;
+        for day in graph.contributions.iter().filter(|c| c.totals.cost > 0.0) {
+            let f = Filter {
+                since: Some(day.date.clone()),
+                until: Some(day.date.clone()),
+                ..Default::default()
+            };
+            let options = f.report_options(
+                "client,provider,model".parse::<GroupBy>().expect("group-by"),
+            );
+            let kept = filter_messages_for_report(snapshot.clone(), &options);
+            let entries = aggregate_model_usage_entries_with_rollup(
+                kept,
+                &options.group_by,
+                WorktreeRollup::default(),
+            );
+            let cost: f64 = entries.iter().map(|e| e.cost).sum();
+            let delta = (cost - day.totals.cost).abs();
+            if delta > worst {
+                worst = delta;
+                println!(
+                    "{}: dialog {cost:.6} vs row {:.6} ({} entries)",
+                    day.date,
+                    day.totals.cost,
+                    entries.len()
+                );
+            }
+            assert!(
+                !entries.is_empty(),
+                "{} has cost but the one-day filter found nothing",
+                day.date
+            );
+            checked += 1;
+        }
+
+        println!("checked {checked} active days, worst delta {worst:.9}");
+        assert!(checked > 0, "no active days to check");
+        assert!(worst < 1e-6, "dialog and row disagree by {worst}");
+    }
 }

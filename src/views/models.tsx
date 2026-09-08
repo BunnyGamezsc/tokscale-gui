@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ViewHeader, Tiles } from "@/components/view";
+import { DRILL, DetailDialog, useRowDetail } from "@/components/detail";
 import { RowSkeleton, NoUsage } from "@/components/states";
 import { GROUP_BY, type Entry, type GroupBy } from "@/lib/api";
 import { useReport } from "@/lib/use-scan";
@@ -44,6 +45,16 @@ export function ModelsView() {
     desc: true,
   });
   const report = useReport(groupBy, snap.ready);
+
+  // A drill-down explains one row by reading the corpus one Group-By finer and
+  // keeping the parts that carry the row's key — free, since that finer report
+  // is one cached call, and exact rather than approximate
+  // (`a_finer_group_by_decomposes_a_coarser_entry_exactly`). Only `model` and
+  // `client,model` have hidden composition; the other three have no finer axis
+  // P1 exposes, so their rows do not open.
+  const [drill, setDrill] = useState<Entry | null>(null);
+  const drillable = Boolean(DRILL[groupBy]);
+  const detail = useRowDetail(drill, groupBy, snap.ready);
 
   // Sorting is client-side: every Group-By yields 38-198 Entries, so there is
   // nothing here worth a round trip or a virtualized list.
@@ -129,7 +140,11 @@ export function ModelsView() {
             <RowSkeleton cols={COLS.length} />
           ) : (
             rows.map((e, i) => (
-              <TableRow key={`${e.model}-${e.client}-${e.sessionId ?? i}`} className="h-row border-border/50">
+              <TableRow
+                key={`${e.model}-${e.client}-${e.sessionId ?? i}`}
+                onClick={drillable ? () => setDrill(e) : undefined}
+                className={`h-row border-border/50 ${drillable ? "cursor-pointer" : ""}`}
+              >
                 {COLS.map((c) => (
                   <TableCell
                     key={c.key}
@@ -156,6 +171,16 @@ export function ModelsView() {
           </TableFooter>
         )}
       </Table>
+
+      {drill && (
+        <DetailDialog
+          title={groupBy === "model" ? drill.model : `${drill.client} · ${drill.model}`}
+          aside={fmtCost(drill.cost)}
+          entries={detail.entries}
+          pending={detail.isPending}
+          onClose={() => setDrill(null)}
+        />
+      )}
     </>
   );
 }
