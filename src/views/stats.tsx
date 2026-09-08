@@ -3,17 +3,7 @@ import { ViewHeader, Tiles, SectionHead } from "@/components/view";
 import { useGraph, useClients } from "@/lib/use-scan";
 import { useSnapshot } from "@/views/snapshot";
 import { fmtCost, fmtInt, fmtTokens } from "@/lib/format";
-
-/** Longest run of consecutive days carrying usage. */
-function longestStreak(levels: number[]) {
-  let best = 0;
-  let run = 0;
-  for (const l of levels) {
-    run = l > 0 ? run + 1 : 0;
-    if (run > best) best = run;
-  }
-  return best;
-}
+import { longestStreak } from "@/lib/streak";
 
 export function StatsView() {
   const snap = useSnapshot();

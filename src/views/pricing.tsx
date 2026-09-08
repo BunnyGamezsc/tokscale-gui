@@ -15,40 +15,7 @@ import * as api from "@/lib/api";
 import { useUnpriced, useCustomPricing, useReport } from "@/lib/use-scan";
 import { useSnapshot } from "@/views/snapshot";
 import { fmtCost, fmtInt, fmtTokens } from "@/lib/format";
-
-const FIELDS = [
-  { key: "input", label: "Input" },
-  { key: "output", label: "Output" },
-  { key: "cacheRead", label: "Cache read" },
-  { key: "cacheWrite", label: "Cache write" },
-] as const;
-
-type Draft = Record<(typeof FIELDS)[number]["key"], string>;
-
-function toDraft(rates?: api.Rates): Draft {
-  return {
-    input: rates?.input != null ? String(rates.input) : "",
-    output: rates?.output != null ? String(rates.output) : "",
-    cacheRead: rates?.cacheRead != null ? String(rates.cacheRead) : "",
-    cacheWrite: rates?.cacheWrite != null ? String(rates.cacheWrite) : "",
-  };
-}
-
-/** Blank means "no rate", which is different from zero. Zero is a statement —
- *  the model is free — and core accepts it deliberately. */
-function toRates(d: Draft): api.Rates {
-  const num = (s: string) => (s.trim() === "" ? null : Number(s));
-  return {
-    input: num(d.input),
-    output: num(d.output),
-    cacheRead: num(d.cacheRead),
-    cacheWrite: num(d.cacheWrite),
-  };
-}
-
-function invalid(d: Draft) {
-  return Object.values(d).some((v) => v.trim() !== "" && !(Number(v) >= 0));
-}
+import { FIELDS, toDraft, toRates, invalid, type Draft } from "@/lib/pricing";
 
 export function PricingView() {
   const snap = useSnapshot();

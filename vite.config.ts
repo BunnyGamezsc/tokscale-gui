@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
@@ -10,4 +10,7 @@ export default defineConfig({
   clearScreen: false,
   server: { port: 1420, strictPort: true, watch: { ignored: ["**/src-tauri/**", "**/vendor/**"] } },
   build: { target: "safari15", sourcemap: true },
+  // Pure functions only: no DOM environment, and the vendored submodule carries
+  // its own suite that is not ours to run.
+  test: { include: ["src/**/*.test.ts"], environment: "node" },
 });
