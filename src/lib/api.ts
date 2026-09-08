@@ -32,13 +32,11 @@ export interface Entry {
   client: string;
   model: string;
   provider: string;
-  workspaceLabel: string | null;
   sessionId: string | null;
   input: number;
   output: number;
   cacheRead: number;
   cacheWrite: number;
-  reasoning: number;
   messageCount: number;
   cost: number;
 }
@@ -48,7 +46,6 @@ export interface Report {
   totalInput: number;
   totalOutput: number;
   totalCacheRead: number;
-  totalCacheWrite: number;
   totalMessages: number;
   totalCost: number;
   elapsedMs: number;
@@ -56,7 +53,6 @@ export interface Report {
 
 export interface ScanSummary {
   messages: number;
-  clientsWithUsage: number;
   firstDay: string | null;
   lastDay: string | null;
   elapsedMs: number;
@@ -95,8 +91,6 @@ export const modelReport = (groupBy: GroupBy, filter?: Filter) =>
 export const graphReport = (filter?: Filter) => invoke<Day[]>("graph_report", { filter });
 
 export const clients = () => invoke<Client[]>("clients");
-
-export const settings = () => invoke<unknown>("settings");
 
 /** A model that spent tokens but produced no cost. */
 export interface Unpriced {

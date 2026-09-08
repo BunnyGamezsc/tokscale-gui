@@ -171,8 +171,7 @@ pub async fn model_report(
     let total_messages = filtered.iter().map(|m| m.message_count).sum();
     let entries =
         aggregate_model_usage_entries_with_rollup(filtered, &group_by, WorktreeRollup::default());
-    let (total_input, total_output, total_cache_read, total_cache_write) =
-        model_report_token_totals(&entries);
+    let (total_input, total_output, total_cache_read, _) = model_report_token_totals(&entries);
 
     Ok(Report {
         total_cost: entries.iter().map(|e| e.cost).sum(),
@@ -180,7 +179,6 @@ pub async fn model_report(
         total_input,
         total_output,
         total_cache_read,
-        total_cache_write,
         total_messages,
         elapsed_ms: started.elapsed().as_millis() as u32,
     })
@@ -265,28 +263,6 @@ pub async fn clients(state: tauri::State<'_, Snapshot>) -> Result<Vec<Client>, S
     let mut out: Vec<Client> = by_client.into_values().collect();
     out.sort_by(|a, b| b.cost.partial_cmp(&a.cost).unwrap_or(std::cmp::Ordering::Equal));
     Ok(out)
-}
-
-/// Reads `~/.config/tokscale/settings.json`.
-///
-/// Read-only in P1. Ticket 09 was explicit that a load-then-write-back would
-/// replace a user's config with defaults if the file exists but did not parse,
-/// so nothing here writes until that refusal is implemented alongside it.
-#[tauri::command]
-pub async fn settings() -> Result<serde_json::Value, String> {
-    blocking(|| {
-        let Some(home) = std::env::var_os("HOME") else {
-            return Ok(serde_json::Value::Null);
-        };
-        let path = std::path::Path::new(&home).join(".config/tokscale/settings.json");
-        match std::fs::read_to_string(&path) {
-            Ok(text) => serde_json::from_str(&text)
-                .map_err(|e| format!("{} did not parse: {e}", path.display())),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::Value::Null),
-            Err(e) => Err(format!("{} could not be read: {e}", path.display())),
-        }
-    })
-    .await
 }
 
 /// Models carrying tokens but no cost.

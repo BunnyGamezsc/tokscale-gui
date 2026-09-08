@@ -27,13 +27,11 @@ pub struct Entry {
     pub client: String,
     pub model: String,
     pub provider: String,
-    pub workspace_label: Option<String>,
     pub session_id: Option<String>,
     pub input: i64,
     pub output: i64,
     pub cache_read: i64,
     pub cache_write: i64,
-    pub reasoning: i64,
     pub message_count: i32,
     pub cost: f64,
 }
@@ -44,13 +42,11 @@ impl From<&ModelUsage> for Entry {
             client: u.client.clone(),
             model: u.model.clone(),
             provider: u.provider.clone(),
-            workspace_label: u.workspace_label.clone(),
             session_id: u.session_id.clone(),
             input: u.input,
             output: u.output,
             cache_read: u.cache_read,
             cache_write: u.cache_write,
-            reasoning: u.reasoning,
             message_count: u.message_count,
             cost: u.cost,
         }
@@ -65,7 +61,6 @@ pub struct Report {
     pub total_input: i64,
     pub total_output: i64,
     pub total_cache_read: i64,
-    pub total_cache_write: i64,
     pub total_messages: i32,
     pub total_cost: f64,
     /// How long the re-aggregation took. Ticket 09 measured 41-100 ms against
@@ -79,7 +74,6 @@ pub struct Report {
 #[serde(rename_all = "camelCase")]
 pub struct ScanSummary {
     pub messages: usize,
-    pub clients_with_usage: usize,
     pub first_day: Option<String>,
     pub last_day: Option<String>,
     pub elapsed_ms: u32,
@@ -98,7 +92,6 @@ impl ScanSummary {
 
         Self {
             messages: messages.len(),
-            clients_with_usage: clients.len(),
             first_day: days.first().map(|s| s.to_string()),
             last_day: days.last().map(|s| s.to_string()),
             elapsed_ms,

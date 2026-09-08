@@ -37,11 +37,17 @@ import { fmtCost, fmtInt, fmtTokens } from "@/lib/format";
  *  is already the finest axis P1 exposes; `workspace,model` and `session,model`
  *  would drill into time, and core has no date Group-By to drill into — see the
  *  ticket 10 answer. A row with no finer axis is not clickable rather than
- *  opening an empty dialog. */
-export const DRILL: Partial<Record<GroupBy, (row: Entry) => (e: Entry) => boolean>> = {
-  model: (row) => (e) => e.model === row.model,
-  "client,model": (row) => (e) => e.model === row.model && e.client === row.client,
-};
+ *  opening an empty dialog. A null `row` probes whether the axis drills at all. */
+export function drillMatch(groupBy: GroupBy, row: Entry | null) {
+  switch (groupBy) {
+    case "model":
+      return (e: Entry) => !!row && e.model === row.model;
+    case "client,model":
+      return (e: Entry) => !!row && e.model === row.model && e.client === row.client;
+    default:
+      return null;
+  }
+}
 
 const FINER: GroupBy = "client,provider,model";
 
@@ -61,7 +67,7 @@ export function useRowDetail(row: Entry | null, groupBy: GroupBy, ready: boolean
     enabled: ready && row !== null,
     staleTime: Infinity,
   });
-  const match = row && DRILL[groupBy]?.(row);
+  const match = row && drillMatch(groupBy, row);
   return { ...q, entries: match ? (q.data?.entries ?? []).filter(match) : [] };
 }
 

@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist-mono";
 
@@ -60,7 +59,6 @@
   /* Cost Source. A displayed cost is only as trustworthy as its provenance
      (CONTEXT.md), so the figure itself carries the signal — no badge needed.
      ProviderReported is plain `--foreground` and gets no token. */
-  --cost-estimated: oklch(0.560 0.085 70);
   --cost-unknown: oklch(0.630 0.007 78);
 
   /* Contribution Graph Ramp: five intensity steps, walked in oklch from the
@@ -83,7 +81,6 @@
   --size-body: 0.8125rem;  /* 13px — default UI text, table cells          */
   --size-title: 1rem;      /* 16px — view title                            */
   --size-figure: 1.0625rem;/* 17px — summary-tile figures                  */
-  --size-display: 1.875rem;/* 30px — the single headline figure per view    */
 
   /* Density. Rows are 27px because every Group-By yields 38-198 Entries and the
      whole report should fit one window; the rhythm is a 4px grid, with 24px as
@@ -118,7 +115,6 @@
   --sidebar-accent: oklch(0.285 0.006 75 / 0.7);
   --sidebar-border: oklch(0.320 0.006 75 / 0.6);
 
-  --cost-estimated: oklch(0.720 0.075 70);
   --cost-unknown: oklch(0.560 0.006 80);
 
   --ramp-0: oklch(0.240 0.005 75);
@@ -168,7 +164,6 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --color-cost-estimated: var(--cost-estimated);
   --color-cost-unknown: var(--cost-unknown);
   --color-ramp-0: var(--ramp-0);
   --color-ramp-1: var(--ramp-1);
@@ -184,7 +179,6 @@
   --text-body: var(--size-body);
   --text-title: var(--size-title);
   --text-figure: var(--size-figure);
-  --text-display: var(--size-display);
   --spacing-gutter: var(--gutter);
   --spacing-row: var(--row-h);
 

@@ -13,7 +13,6 @@ export function useScan() {
   const qc = useQueryClient();
   const [abandoned, setAbandoned] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const startedAt = useRef<number | null>(null);
 
   const force = useRef(false);
   const query = useQuery({
@@ -30,23 +29,14 @@ export function useScan() {
   // An elapsed timer is the honest progress indicator: there is no percentage to
   // show, because the parse reports nothing until it finishes.
   useEffect(() => {
-    if (!query.isFetching) {
-      startedAt.current = null;
-      return;
-    }
-    startedAt.current = Date.now();
+    if (!query.isFetching) return;
+    const started = Date.now();
     setElapsed(0);
     const id = setInterval(() => {
-      if (startedAt.current) setElapsed(Math.round((Date.now() - startedAt.current) / 1000));
+      setElapsed(Math.round((Date.now() - started) / 1000));
     }, 250);
     return () => clearInterval(id);
   }, [query.isFetching]);
-
-  // The last run's duration is the only ETA worth showing.
-  const [lastMs, setLastMs] = useState<number | null>(null);
-  useEffect(() => {
-    if (query.data) setLastMs(query.data.elapsedMs);
-  }, [query.data]);
 
   return {
     summary: query.data,
@@ -56,7 +46,9 @@ export function useScan() {
     /** True when the user stopped waiting but no result has landed yet. */
     abandoned: abandoned && query.isFetching,
     elapsed,
-    etaSeconds: lastMs ? Math.round(lastMs / 1000) : null,
+    // The last run's duration is the only ETA worth showing, and the query keeps
+    // it across a refetch.
+    etaSeconds: query.data?.elapsedMs ? Math.round(query.data.elapsedMs / 1000) : null,
     abandon: () => setAbandoned(true),
     refresh: () => {
       setAbandoned(false);

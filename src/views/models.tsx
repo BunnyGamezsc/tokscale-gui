@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ViewHeader, Tiles } from "@/components/view";
-import { DRILL, DetailDialog, useRowDetail } from "@/components/detail";
+import { drillMatch, DetailDialog, useRowDetail } from "@/components/detail";
 import { RowSkeleton, NoUsage } from "@/components/states";
 import { GROUP_BY, type Entry, type GroupBy } from "@/lib/api";
 import { useReport } from "@/lib/use-scan";
@@ -53,7 +53,7 @@ export function ModelsView() {
   // `client,model` have hidden composition; the other three have no finer axis
   // P1 exposes, so their rows do not open.
   const [drill, setDrill] = useState<Entry | null>(null);
-  const drillable = Boolean(DRILL[groupBy]);
+  const drillable = drillMatch(groupBy, null) !== null;
   const detail = useRowDetail(drill, groupBy, snap.ready);
 
   // Sorting is client-side: every Group-By yields 38-198 Entries, so there is

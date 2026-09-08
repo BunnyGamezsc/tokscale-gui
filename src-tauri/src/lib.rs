@@ -5,7 +5,7 @@
 //! The command surface designed by ticket 09 now lives in `commands`:
 //!
 //! - Five commands, all `async` and all dispatched onto `spawn_blocking`:
-//!   `scan`, `model_report`, `graph_report`, `clients`, `settings`.
+//!   `scan`, `model_report`, `graph_report`, `clients`, `unpriced`.
 //! - `scan` parses once into a snapshot held in `tauri::State`; the report
 //!   commands re-aggregate from that snapshot rather than rescanning.
 //! - Progress is a `scan:progress` Tauri event, emitted around the discovery
@@ -61,7 +61,6 @@ pub fn run() {
             commands::model_report,
             commands::graph_report,
             commands::clients,
-            commands::settings,
             commands::unpriced,
             pricing::custom_pricing,
             pricing::set_custom_pricing,

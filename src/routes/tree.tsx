@@ -4,7 +4,6 @@ import {
   Link,
   Outlet,
 } from "@tanstack/react-router";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { OverviewView } from "@/views/overview";
 import { ModelsView } from "@/views/models";
 import { DailyView } from "@/views/daily";
@@ -27,39 +26,37 @@ const NAV = [
  *  NSVisualEffectView shows through it. */
 function Shell() {
   return (
-    <TooltipProvider delayDuration={200}>
-      <div className="flex h-full bg-background text-foreground">
-        <aside className="flex w-[180px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-          {/* Reserves space for the overlaid traffic lights. See ticket 03:
-              trafficLightPosition is creation-time only, so this must stay in
-              sync with tauri.conf.json. */}
-          <div className="h-11 shrink-0" data-tauri-drag-region />
-          <nav className="flex flex-col">
-            {NAV.map(({ path, label }) => (
-              <Link
-                key={path}
-                to={path}
-                activeOptions={{ exact: path === "/" }}
-                className="px-4 py-[6px] text-muted-foreground transition-colors duration-150 ease-out"
-                activeProps={{
-                  className:
-                    "px-4 py-[6px] font-medium text-foreground shadow-[inset_2px_0_0_var(--primary)]",
-                }}
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
-        </aside>
+    <div className="flex h-full bg-background text-foreground">
+      <aside className="flex w-[180px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+        {/* Reserves space for the overlaid traffic lights. See ticket 03:
+            trafficLightPosition is creation-time only, so this must stay in
+            sync with tauri.conf.json. */}
+        <div className="h-11 shrink-0" data-tauri-drag-region />
+        <nav className="flex flex-col">
+          {NAV.map(({ path, label }) => (
+            <Link
+              key={path}
+              to={path}
+              activeOptions={{ exact: path === "/" }}
+              className="px-4 py-[6px] text-muted-foreground transition-colors duration-150 ease-out"
+              activeProps={{
+                className:
+                  "px-4 py-[6px] font-medium text-foreground shadow-[inset_2px_0_0_var(--primary)]",
+              }}
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
+      </aside>
 
-        <main className="flex-1 overflow-auto">
-          <div className="h-11 w-full" data-tauri-drag-region />
-          <div className="px-gutter pb-8">
-            <Outlet />
-          </div>
-        </main>
-      </div>
-    </TooltipProvider>
+      <main className="flex-1 overflow-auto">
+        <div className="h-11 w-full" data-tauri-drag-region />
+        <div className="px-gutter pb-8">
+          <Outlet />
+        </div>
+      </main>
+    </div>
   );
 }
 
