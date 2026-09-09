@@ -89,7 +89,7 @@ and theming. Contribution graph. Manual pricing overrides.
 ## Open
 
 **All of the below is specced in [#20](https://github.com/BunnyGamezsc/tokscale-gui/issues/20)**
-and sliced into tickets **#21–#31**. Start with #21, #22 or #23 — those have no blockers.
+and sliced into tickets **#21–#31**, plus **#32** from #27's decision. Start with #21, #22 or #23 — those have no blockers.
 The list here stays as the plain-language index.
 
 Roughly in the order they bite.
@@ -103,8 +103,7 @@ Roughly in the order they bite.
 
 2. ~~**`graph_report` re-enters the parse.**~~ Settled by #27: the ordering holds. A Scan
    warms the graph path, so the first visit to Daily costs 0.28–0.76 s, not 15 s. The fork
-   does not widen; what is left is showing that sub-second pending state honestly, which is
-   its own ticket.
+   does not widen; what is left is showing that sub-second pending state honestly — #32.
 
 3. **Contribution graph rendering and interaction.** Ramp bucketing is settled (#25): a
    logarithm across the active span, which beat core's ratio thresholds and the TUI's clamped
