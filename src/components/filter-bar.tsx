@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useScan, useAllClients } from "@/lib/use-scan";
+import { useScanLanded, useAllClients } from "@/lib/use-scan";
 import { useFilter, setFilter, clearFilter, isNarrowed } from "@/lib/filter";
 
 /** The Report Filter, in the window chrome.
@@ -17,8 +17,7 @@ import { useFilter, setFilter, clearFilter, isNarrowed } from "@/lib/filter";
  *  and the Client options are read off the corpus.
  */
 export function FilterBar() {
-  const scan = useScan();
-  const ready = Boolean(scan.summary && scan.summary.messages > 0);
+  const ready = useScanLanded();
   const filter = useFilter();
   const clients = useAllClients(ready);
 
@@ -42,7 +41,6 @@ export function FilterBar() {
         aria-label="From"
         value={filter.since ?? ""}
         max={filter.until}
-        placeholder={scan.summary?.firstDay ?? undefined}
         onChange={(e) => setFilter({ ...filter, since: e.target.value })}
         className={FIELD}
       />
@@ -62,7 +60,15 @@ export function FilterBar() {
             key={c.id}
             className="flex cursor-pointer items-center gap-2 rounded-[3px] px-1.5 py-1 hover:bg-muted"
           >
-            <input type="checkbox" checked={picked.includes(c.id)} onChange={() => toggle(c.id)} />
+            {/* `accent-color`, so the tick wears the palette's azure rather than the
+                OS accent — the Ramp and the primary action are the only two
+                places the accent is spent. */}
+            <input
+              type="checkbox"
+              checked={picked.includes(c.id)}
+              onChange={() => toggle(c.id)}
+              className="accent-[var(--primary)]"
+            />
             <span className="font-mono">{c.id}</span>
           </label>
         ))}

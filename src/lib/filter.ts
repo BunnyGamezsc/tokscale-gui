@@ -43,6 +43,11 @@ export function useFilter(): Filter {
   );
 }
 
+/** The unnarrowed Filter. A named constant because it is also a query key —
+ *  `useAllClients` must land on the same cache entry as `useClients` before the
+ *  user has narrowed anything. */
+export const NO_FILTER: Filter = {};
+
 export const isNarrowed = (f: Filter) => Object.keys(f).length > 0;
 
 /** The Filter as a command argument: `undefined` when it narrows nothing. */

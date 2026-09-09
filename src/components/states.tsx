@@ -81,9 +81,9 @@ export function NoUsage() {
 export function NoMatch({ onClear }: { onClear: () => void }) {
   return (
     <Placeholder
-      title="Nothing in this range"
-      body="The corpus has usage, but none of it matches the active filter."
-      action={<Button variant="outline" size="sm" onClick={onClear}>Clear filter</Button>}
+      title="Nothing matches the filter"
+      body="The corpus has usage, but none of it survives the active Report Filter."
+      action={<Button variant="outline" size="sm" onClick={onClear}>Clear the filter</Button>}
     />
   );
 }

@@ -62,7 +62,9 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
   paths agree exactly under both narrowings — `daily_detail_agrees_with_the_daily_row` runs
   a whole-corpus, a narrowed-range and a narrowed-Client arm, worst delta 0.0 on 71/36/47
   active days. A narrowed graph call walks a subset of the warmed cache and is *cheaper*
-  than an unnarrowed one: 28 ms against 331 ms warm in release.
+  than an unnarrowed one, which is what #27's model predicts: 28 ms against 331 ms warm in
+  release, 36 ms against 259 ms cold. A narrowed graph also re-buckets the Ramp over the days
+  the Filter kept, so narrowing re-colours the grid on purpose.
 - Manual pricing overrides are written to `~/.config/tokscale/custom-pricing.json`, the same
   file the CLI and TUI read. Saves merge rather than replace, so hand-written tiers survive.
 

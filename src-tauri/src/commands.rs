@@ -271,7 +271,14 @@ pub fn ramp_level(active: &[f64], cost: f64) -> u8 {
 /// call after a Scan is sub-second — 0.28 s cold, 0.76 s warm in release — not
 /// the several seconds it costs when called with no Scan in front of it. The UI
 /// cannot make that call: `useGraph` is gated on the Scan landing. See
-/// `a_scan_warms_the_graph_path`.
+/// `a_scan_warms_the_graph_path`, which also measures a Client-narrowed call:
+/// it walks a subset of the same warmed cache, so it is cheaper still.
+///
+/// A narrowed graph re-buckets. `ramp_level` is computed over the days the
+/// Report Filter kept, so the Ramp always describes the distribution the user
+/// is looking at rather than one they filtered away — narrowing to a quiet
+/// Client re-colours every cell, and that is the bucketing telling the truth
+/// about the narrowed question.
 #[tauri::command]
 pub async fn graph_report(filter: Option<Filter>) -> Result<Vec<Day>, String> {
     let filter = filter.unwrap_or_default();
