@@ -25,7 +25,7 @@ let force = false;
 let abandoned = false;
 const listeners = new Set<() => void>();
 
-function set(next: boolean) {
+function setAbandoned(next: boolean) {
   abandoned = next;
   for (const l of listeners) l();
 }
@@ -42,12 +42,12 @@ function useAbandoned() {
   );
 }
 
-export const abandonScan = () => set(true);
+export const abandonScan = () => setAbandoned(true);
 
 /** Rescan. The one path that must actually re-parse: a new Snapshot makes every
  *  report read from the old one stale, so the whole cache goes with it. */
 export function refreshScan(qc: QueryClient) {
-  set(false);
+  setAbandoned(false);
   force = true;
   qc.invalidateQueries();
 }
@@ -67,7 +67,6 @@ export function useRefresh() {
  *  Scan still leaves the next one warm. Nothing partial is left behind.
  */
 export function useScan() {
-  const qc = useQueryClient();
   const abandoned = useAbandoned();
   const [elapsed, setElapsed] = useState(0);
 
@@ -106,7 +105,6 @@ export function useScan() {
     // it across a refetch.
     etaSeconds: query.data?.elapsedMs ? Math.round(query.data.elapsedMs / 1000) : null,
     abandon: abandonScan,
-    refresh: () => refreshScan(qc),
   };
 }
 

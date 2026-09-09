@@ -211,6 +211,12 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  /* `showModal()` focuses the dialog itself when nothing inside autofocuses.
+     That is containment, not a control taking focus, so it gets no ring. */
+  dialog:focus,
+  dialog:focus-visible {
+    outline: none;
+  }
   html {
     @apply font-sans;
   }

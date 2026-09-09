@@ -161,9 +161,13 @@ export function ModelsView() {
                         does not drill, so it gets no button either. */}
                     {col === 0 && drillable ? (
                       <button
+                        type="button"
                         className="text-left"
                         aria-label={`${e.model}, breakdown`}
-                        onClick={() => setDrill(e)}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          setDrill(e);
+                        }}
                       >
                         {c.render(e)}
                       </button>

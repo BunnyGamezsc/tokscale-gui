@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useScan } from "@/lib/use-scan";
+import { useRefresh, useScan } from "@/lib/use-scan";
 import { useFilter } from "@/lib/filter";
 import { Scanning, Abandoned, Failed, NoUsage } from "@/components/states";
 
@@ -13,6 +13,9 @@ export function useSnapshot(): {
   refresh: () => void;
 } {
   const scan = useScan();
+  // The one Refresh door, shared with the shell's `R` binding. `useScan` does
+  // not hand one out: Refresh is window state, not a View's (ADR 0003).
+  const refresh = useRefresh();
   const filter = useFilter();
 
   // The range beside a View title is the question being asked, so the active
@@ -23,9 +26,9 @@ export function useSnapshot(): {
 
   let gate: ReactNode | null = null;
   if (scan.error) {
-    gate = <Failed message={scan.error} onRetry={scan.refresh} />;
+    gate = <Failed message={scan.error} onRetry={refresh} />;
   } else if (scan.abandoned) {
-    gate = <Abandoned onRefresh={scan.refresh} />;
+    gate = <Abandoned onRefresh={refresh} />;
   } else if (scan.scanning) {
     gate = (
       <Scanning elapsed={scan.elapsed} etaSeconds={scan.etaSeconds} onAbandon={scan.abandon} />
@@ -38,6 +41,6 @@ export function useSnapshot(): {
     ready: Boolean(scan.summary && scan.summary.messages > 0),
     rangeLabel,
     gate,
-    refresh: scan.refresh,
+    refresh,
   };
 }

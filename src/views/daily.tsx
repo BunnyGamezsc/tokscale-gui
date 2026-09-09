@@ -76,9 +76,16 @@ export function DailyView() {
                         — makes a row that announces as a row and behaves as a
                         control, and costs the tab order one stop per day. */}
                     <button
+                      type="button"
                       className="text-left"
                       aria-label={`${d.date}, breakdown`}
-                      onClick={() => dayDialog.open(d.date)}
+                      // The row handles the same click. Stopped rather than
+                      // left to fire twice: it is idempotent today only because
+                      // both entrances pass the same date.
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        dayDialog.open(d.date);
+                      }}
                     >
                       {d.date}
                     </button>

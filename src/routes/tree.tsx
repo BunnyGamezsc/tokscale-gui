@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   createRootRoute,
   createRoute,
@@ -12,7 +12,8 @@ import { DailyView } from "@/views/daily";
 import { StatsView } from "@/views/stats";
 import { PricingView } from "@/views/pricing";
 import { FilterBar } from "@/components/filter-bar";
-import { BINDINGS, isTyping, resolve } from "@/lib/keys";
+import { bindings, isTyping, resolve } from "@/lib/keys";
+import { Modal } from "@/components/modal";
 import { useRefresh } from "@/lib/use-scan";
 
 /** Sidebar destinations. P1 ships Overview, Models, Daily and Stats; the rest
@@ -41,12 +42,24 @@ function Shell() {
   // dispatches it.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // A modal owns the window while it is up. Navigating out from under one
+      // would unmount it without `close()` — no focus restored, and the top
+      // layer torn down — and Refresh would rescan behind it, invalidating the
+      // query it is reading. Esc is the way out, and that is the platform's.
+      if (document.querySelector("dialog[open]")) return;
+
       const action = resolve(e, isTyping(e.target as HTMLElement | null));
       if (!action) return;
+
+      if (action.kind === "refresh") refresh();
+      else if (action.kind === "help") setHelp(true);
+      else {
+        // Bounds-checked here because `keys.ts` does not know the sidebar.
+        const destination = NAV[action.index];
+        if (!destination) return;
+        void navigate({ to: destination.path });
+      }
       e.preventDefault();
-      if (action === "refresh") refresh();
-      else if (action === "help") setHelp(true);
-      else void navigate({ to: NAV[Number(action.slice(4))].path });
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -108,44 +121,30 @@ function Shell() {
 
 /** What the bindings are, said by the app rather than by the source.
  *
- *  A `<dialog>` and a list, not a ⌘K palette. ADR 0003: a palette is a way to
- *  reach commands you cannot see, and this window's commands are five sidebar
- *  links, a Refresh button and a Report Filter, all of them on screen. The
- *  native element brings the modal backdrop, focus containment, Esc-to-close and
- *  focus restored to whatever opened it — the last of which is an acceptance
- *  criterion here, and free.
+ *  A list in a dialog, not a ⌘K palette. ADR 0003: a palette is a way to reach
+ *  commands you cannot see, and this window's commands are five sidebar links,
+ *  a Refresh button and a Report Filter, all of them on screen. It needs no
+ *  Snapshot either, which makes it the one piece of chrome that fully works
+ *  during a first scan.
  *
- *  It reads `BINDINGS`, which is the same module the resolver is in, so the
- *  sheet cannot describe a binding the app does not have.
+ *  It reads `bindings(NAV)`, so the ⌘-digit row cannot name a sidebar the
+ *  sidebar does not have.
  */
 function Shortcuts({ onClose }: { onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    ref.current?.showModal();
-  }, []);
-
   return (
-    <dialog
-      ref={ref}
-      onClose={onClose}
-      onClick={(e) => {
-        if (e.target === ref.current) ref.current?.close();
-      }}
-      aria-label="Keyboard shortcuts"
-      className="w-[440px] max-w-[90vw] rounded-md border border-border bg-background p-0 text-foreground shadow-lg backdrop:bg-black/25"
-    >
-      <header className="border-b border-border px-4 py-3">
-        <h2 className="text-small font-semibold">Keyboard shortcuts</h2>
-      </header>
+    <Modal title="Keyboard shortcuts" onClose={onClose} className="w-[440px] max-w-[90vw]">
       <dl className="px-4 py-2 text-small">
-        {BINDINGS.map((b) => (
-          <div key={b.keys} className="flex items-baseline gap-4 border-b border-border/50 py-1.5 last:border-0">
+        {bindings(NAV.map((n) => n.label)).map((b) => (
+          <div
+            key={b.keys}
+            className="flex items-baseline gap-4 border-b border-border/50 py-1.5 last:border-0"
+          >
             <dt className="w-[92px] shrink-0 font-mono text-muted-foreground">{b.keys}</dt>
             <dd className="m-0">{b.label}</dd>
           </div>
         ))}
       </dl>
-    </dialog>
+    </Modal>
   );
 }
 

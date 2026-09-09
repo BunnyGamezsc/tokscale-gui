@@ -35,19 +35,25 @@ A library earns its place when there are sequences, scopes, or a registry that
 components contribute to at runtime. There is one scope here (the window), no sequences,
 and the binding set is a literal in one file.
 
-### `event.code`, not `event.key`
+### `event.code` for the letter, `event.key` for the punctuation
 
 Upstream's `normalize_hotkey` exists because a terminal reports the *character* a key
 produced, so `r` stops refreshing under a Russian layout. `KeyboardEvent.code` is the
 physical key, so the webview gives that behaviour for free. The 236-line table is not
 ported; the property is just chosen correctly.
 
+`?` is the exception, and it is not an oversight. The sheet advertises a **character**,
+and the key that produces it moves between layouts — Shift+`/` on US, Shift+`ß` on German.
+Matching it by position would advertise a key that does not work. So `?` is matched on
+`event.key`, which is the honest property for a binding named after what you type. One
+binding, one deviation, stated here rather than discovered.
+
 ### The bindings that survive
 
 | Kept | What it does | Why |
 | --- | --- | --- |
 | `⌘1`–`⌘5` | Go to Overview, Models, Daily, Stats, Pricing | Upstream's tab cycling, in the shape macOS already uses for tabs. A modifier, so it cannot collide with the graph or with a text field. |
-| `R` | Refresh | Upstream's `r`. The one action with no visible control outside Overview. |
+| `R` | Refresh | Upstream's `r`. The one action with no visible control outside Overview. Shift is not checked: the sheet says `R`, and Shift+R meaning nothing would make the sheet a lie. |
 | `?` | Shortcuts sheet | New. There is no TUI equivalent; a terminal has a footer hint line. |
 | `Enter` / `Space` | Activate what has focus | Upstream's `Enter` opens the selected Daily/Stats detail. The platform's, once the thing is a `<button>`. |
 | `Esc` | Close a dialog | Upstream's, and the native `<dialog>`'s. |
@@ -65,7 +71,7 @@ Rejected, with the reason each was rejected:
 | `c` / `t` / `d` sort | Models' sort is a column header you can see, click, tab to and press `Enter` on. A key for a visible control is a second way to do one thing. |
 | `j` jump to today | Daily is sorted newest-first, so today is the **first row**. There is nothing to jump to. (The ticket is right that `j` is not a filter — it is just redundant here, not misunderstood.) |
 | `p` cycle theme, `l` light mode | Theme is a *window* state, not a CSS class: `set_theme` and `data-theme` are written together in `applyAppearance` and nowhere else. It belongs to the appearance code and to P2's settings screen, not to a keymap. |
-| `R` toggle auto-refresh, `+` / `-` interval | Interval refresh is not built (P2, "Not yet specified"). |
+| `R` toggle auto-refresh, `+` / `-` interval | Interval refresh is not built (P2, "Not yet specified"). Refresh therefore answers to Shift+R too; auto-refresh can claim its own key when it arrives. |
 | `y` copy row | No selection model, and the text is selectable — ⌘C is the platform's. |
 | `e` export JSON | No export in P1. It needs a save panel, not a key. |
 | `s` client picker | The Report Filter's Picker **is** that control, visible in the chrome. It is also report-time, where upstream's `s` is scan-time; naming those two things apart is roadmap item 5 and not settled. |
@@ -124,11 +130,20 @@ trees that do not share a parent.
 
 ## Consequences
 
-- Single-key bindings are refused while focus is in an `<input>`, `<textarea>`, `<select>`
-  or anything `contenteditable`, guarded on the **event target** rather than a View flag:
-  the Report Filter's two date inputs live in the chrome, where no View flag can see them.
-  Modified bindings are not refused — `⌘1` is not a character a field can receive.
-- `⌘R` is left to the webview's reload; plain `R` is Refresh.
+- Single-key bindings are refused while focus is in a `<textarea>`, a `<select>`, anything
+  `contenteditable`, or an `<input>` that is not a toggle — guarded on the **event target**
+  rather than a View flag, because the Report Filter's two date inputs live in the chrome
+  where no View flag can see them. A checkbox is not a text input, so `R` still refreshes
+  from the Filter's Client list. `⌘`-digit is never refused: it is not a character a field
+  can receive.
+- `⌘R` is left to the webview's reload; plain `R` is Refresh. `⌃`-digit is not bound —
+  this is a macOS-only app (`macOSPrivateApi`, overlaid traffic lights), so ⌘ is the one
+  modifier.
+- **While a modal is open, the window's bindings are inert.** A dialog owns the window
+  while it is up: navigating out from under one would unmount it without `close()`, so no
+  focus would be restored and the top layer would be torn down, and Refresh would rescan
+  behind a dialog that is reading the query being invalidated. `Esc` is the way out, and
+  that is the platform's.
 - Focus is visible everywhere from one `:focus-visible` rule in `styles.css`. Controls
   that paint their own ring — shadcn's `Button`, the graph's cells — declare it in the
   utilities layer, which wins over base.
@@ -136,7 +151,14 @@ trees that do not share a parent.
   it survives the conditional rendering the dialogs use: `close()` restores focus *before*
   it dispatches `close`, so React unmounts afterwards. Verified in the running app —
   focus the sidebar's Shortcuts button, `Enter`, `Esc`, and `document.activeElement` is
-  the button again with the dialog gone from the DOM.
+  the button again with the dialog gone from the DOM. Both dialogs now share one
+  `components/modal.tsx`, so the Daily Detail and the Shortcuts sheet cannot drift apart
+  on it. `showModal()` focuses the dialog element itself when nothing inside autofocuses;
+  that is containment rather than a control taking focus, so it is exempted from the
+  focus-ring rule.
+- The sheet is a function of the sidebar, not a literal beside it: `bindings(NAV)` builds
+  the `⌘1 – ⌘n` row from the destinations, and `resolve` returns an index the shell
+  bounds-checks. Adding a destination is one edit, and the sheet follows it.
 - The binding set is small enough that adding one is editing two lines in one file. If
   that stops being true — P2 brings Agents, Hourly, Usage and a settings screen — this
   decision is worth re-reading, but the library question should be reopened on a count,

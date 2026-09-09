@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Modal } from "@/components/modal";
 import {
   Table,
   TableBody,
@@ -117,33 +118,16 @@ export function DetailDialog({
   pending: boolean;
   onClose: () => void;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
-
-  // The native element, not a portal-and-focus-trap of our own: it gives the
-  // modal backdrop, focus containment and Esc-to-close for free, and Esc is
-  // already the key that closes upstream's Daily Detail.
-  useEffect(() => {
-    ref.current?.showModal();
-  }, []);
-
   const rows = [...entries].sort((a, b) => b.cost - a.cost);
   const total = rows.reduce((s, e) => s + e.cost, 0);
 
   return (
-    <dialog
-      ref={ref}
+    <Modal
+      title={title}
+      aside={aside}
       onClose={onClose}
-      onClick={(e) => {
-        // Backdrop clicks land on the dialog itself, never on its content.
-        if (e.target === ref.current) ref.current?.close();
-      }}
-      className="max-h-[70vh] w-[620px] max-w-[90vw] rounded-md border border-border bg-background p-0 text-foreground shadow-lg backdrop:bg-black/25"
+      className="max-h-[70vh] w-[620px] max-w-[90vw]"
     >
-      <header className="flex items-baseline justify-between border-b border-border px-4 py-3">
-        <h2 className="text-small font-semibold">{title}</h2>
-        <span className="tnum font-mono text-small text-muted-foreground">{aside}</span>
-      </header>
-
       <div className="max-h-[52vh] overflow-y-auto px-4">
         <Table className="text-small">
           <TableHeader>
@@ -200,6 +184,6 @@ export function DetailDialog({
           )}
         </Table>
       </div>
-    </dialog>
+    </Modal>
   );
 }
