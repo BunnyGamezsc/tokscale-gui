@@ -240,8 +240,15 @@ pub fn ramp_level(active: &[f64], cost: f64) -> u8 {
 ///
 /// The one asymmetry in the surface (ticket 09): this cannot be served from the
 /// Snapshot, because core streams it through a private `GraphSink` that also
-/// runs sessionize and active-time, so it re-enters the parse. It stays a ~0.9 s
-/// call invalidated only by a `scan`.
+/// runs sessionize and active-time, so it re-enters the parse. Invalidated only
+/// by a `scan`.
+///
+/// Ticket 27 settled what that costs and decided to keep it. The re-entered
+/// parse reads the same on-disk cache the Scan just wrote, so the first graph
+/// call after a Scan is sub-second — 0.28 s cold, 0.76 s warm in release — not
+/// the several seconds it costs when called with no Scan in front of it. The UI
+/// cannot make that call: `useGraph` is gated on the Scan landing. See
+/// `a_scan_warms_the_graph_path`.
 #[tauri::command]
 pub async fn graph_report(filter: Option<Filter>) -> Result<Vec<Day>, String> {
     let filter = filter.unwrap_or_default();
@@ -484,6 +491,12 @@ mod tests {
     /// that at ~0.9 s; the 2026-09-06 handoff flags the figure as stale, and a
     /// global filter is only usable on Daily and Stats if it is still about
     /// that. This prints the real number against the real corpus.
+    ///
+    /// Note what its two figures mean: both calls are made with **no Scan in
+    /// front of them**, so "warm" here is the second call in the same process.
+    /// The app never makes that call — it Scans first. Ticket 27's
+    /// `a_scan_warms_the_graph_path` below measures the order the app actually
+    /// uses, and gets a very different number.
     #[test]
     #[ignore]
     fn graph_report_cost() {
@@ -500,6 +513,105 @@ mod tests {
         };
         run("graph_report cold");
         run("graph_report warm");
+    }
+
+    /// Ticket 27's probe: **does a Scan warm the graph path before the first
+    /// Daily visit?**
+    ///
+    /// `graph_report_cost` above cannot answer that. Its warm figure is the
+    /// *second graph call*, and the app never makes one before Daily is first
+    /// opened — it runs a Scan, then one graph call. Those are two different
+    /// measurements, so this reproduces the app's order instead.
+    ///
+    /// The Scan is not the `scan` command: that is a `#[tauri::command]` taking
+    /// `tauri::State` and there is no app handle in a test. It is what `scan`
+    /// calls, with the same pricing branch, which is what does the warming.
+    ///
+    /// Warm arm — a machine that has scanned before, which is every launch
+    /// after the first:
+    ///
+    /// `cargo test --lib --release -- --ignored --nocapture a_scan_warms`
+    ///
+    /// Cold arm — a first-ever run. `TOKSCALE_CONFIG_DIR` gives core a hermetic
+    /// config root, so the parse cache starts empty and the real one is left
+    /// alone. It moves the pricing cache too, so the scan re-fetches rates:
+    /// that is part of a genuine first run.
+    ///
+    /// `TOKSCALE_CONFIG_DIR=$(mktemp -d) cargo test --lib --release -- --ignored --nocapture a_scan_warms`
+    ///
+    /// Run it by name. Both probes in this module walk the same corpus, and the
+    /// harness would otherwise run them in one process where whichever went
+    /// first warms the other.
+    ///
+    /// Prints; never asserts. The figures are the point and they belong to the
+    /// machine and corpus that produced them, so they are recorded on the
+    /// ticket rather than frozen here (see the note in `lib.rs` about tickets
+    /// 08 and 14).
+    #[test]
+    #[ignore]
+    fn a_scan_warms_the_graph_path() {
+        println!(
+            "profile: {}, config dir: {}",
+            if cfg!(debug_assertions) {
+                "debug"
+            } else {
+                "release"
+            },
+            std::env::var("TOKSCALE_CONFIG_DIR")
+                .unwrap_or_else(|_| "default (warm arm)".to_string())
+        );
+
+        // Exactly what `scan` runs, pricing branch included: a Snapshot built
+        // without pricing warms the same parse cache but is not the call the
+        // app makes.
+        let started = Instant::now();
+        let snapshot = tauri::async_runtime::block_on(async {
+            match crate::pricing::reloaded() {
+                Some(fresh) => {
+                    parse_local_unified_messages_with_pricing(
+                        Filter::default().parse_options(),
+                        Some(&fresh),
+                    )
+                    .await
+                }
+                None => {
+                    let pricing = PricingService::get_or_init().await.ok();
+                    parse_local_unified_messages_with_pricing(
+                        Filter::default().parse_options(),
+                        pricing.as_deref(),
+                    )
+                    .await
+                }
+            }
+        })
+        .expect("scan");
+        let summary = ScanSummary::of(&snapshot, started.elapsed().as_millis() as u32);
+        println!(
+            "scan: {} ms, {} messages, {} - {}",
+            summary.elapsed_ms,
+            summary.messages,
+            summary.first_day.as_deref().unwrap_or("-"),
+            summary.last_day.as_deref().unwrap_or("-"),
+        );
+
+        let graph = |label: &str| {
+            let started = Instant::now();
+            let out = tauri::async_runtime::block_on(generate_local_graph_report(
+                Filter::default().report_options(GroupBy::Model),
+            ));
+            let ms = started.elapsed().as_millis();
+            match out {
+                Ok(r) => println!("{label}: {ms} ms, {} days", r.contributions.len()),
+                Err(e) => println!("{label}: {ms} ms, failed: {e}"),
+            }
+        };
+        // The one the ticket asks about: what a user pays on their first visit
+        // to Daily.
+        graph("first graph call after the scan");
+        // What `graph_report_cost` calls warm, measured here for comparison: if
+        // the two agree, the Scan did the warming and a second call buys
+        // nothing more.
+        graph("second graph call");
     }
 
     /// Ticket 10's first contract: **a drill-down sums to the row it opened

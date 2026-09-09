@@ -46,7 +46,12 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 - Everything runs on `spawn_blocking` — a cold scan on the async runtime starves every other
   command.
 - `graph_report` is the one asymmetry: it re-enters the parse through core's private
-  `GraphSink`. ~1.3 s warm, ~15 s cold, measured by the `#[ignore]`d probe in `commands.rs`.
+  `GraphSink`. The asymmetry stays. Ticket 27 measured the order the app actually uses —
+  Scan, then the first graph call — at **0.28 s cold and 0.76 s warm** in release, because
+  the re-entered parse reads the on-disk cache the Scan just wrote. The earlier
+  "~1.3 s warm / ~15 s cold" was a graph call with *no* Scan in front of it, and the UI
+  cannot make that call: `useGraph` is gated on the Scan landing. Neither of those two
+  figures reproduced; see #27 for the full table and the build each number came from.
 - The Report Filter's `clients` is **scan-time only**. Core's report-time predicate consults
   `year`/`since`/`until` and never `clients` — pinned by
   `a_client_narrowing_is_inert_against_the_held_snapshot`.
@@ -96,11 +101,10 @@ Roughly in the order they bite.
    lines, advances in seven uneven lumps), or accept it and spend the effort on what the empty
    window says. Also: is a first run visually distinct from a refresh?
 
-2. **`graph_report` re-enters the parse.** Daily and Stats pay ~1.3 s per Report Filter change
-   where Overview and Models pay 41–100 ms. The 15 s cold call should be absorbed by `scan`
-   warming the caches first, but **that ordering has never been verified through the UI** — if
-   it does not hold, the first visit to Daily is a silent 15 s wait with nothing on screen to
-   explain it. Decide whether the fork widens to serve these from the Snapshot.
+2. ~~**`graph_report` re-enters the parse.**~~ Settled by #27: the ordering holds. A Scan
+   warms the graph path, so the first visit to Daily costs 0.28–0.76 s, not 15 s. The fork
+   does not widen; what is left is showing that sub-second pending state honestly, which is
+   its own ticket.
 
 3. **Contribution graph rendering and interaction.** Ramp bucketing is settled (#25): a
    logarithm across the active span, which beat core's ratio thresholds and the TUI's clamped

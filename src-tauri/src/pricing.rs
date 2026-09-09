@@ -53,9 +53,12 @@ fn read_file() -> Result<Option<Value>, String> {
 
 fn read_at(p: &std::path::Path) -> Result<Option<Value>, String> {
     match std::fs::read_to_string(p) {
-        Ok(text) => serde_json::from_str(&text)
-            .map(Some)
-            .map_err(|e| format!("{} did not parse, so it was left untouched: {e}", p.display())),
+        Ok(text) => serde_json::from_str(&text).map(Some).map_err(|e| {
+            format!(
+                "{} did not parse, so it was left untouched: {e}",
+                p.display()
+            )
+        }),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(format!("{} could not be read: {e}", p.display())),
     }
@@ -185,7 +188,8 @@ fn write_file(doc: &Value) -> Result<(), String> {
     let dir = final_path
         .parent()
         .ok_or("custom-pricing.json has no parent directory")?;
-    std::fs::create_dir_all(dir).map_err(|e| format!("{} could not be created: {e}", dir.display()))?;
+    std::fs::create_dir_all(dir)
+        .map_err(|e| format!("{} could not be created: {e}", dir.display()))?;
 
     let text = serde_json::to_string_pretty(doc).map_err(|e| e.to_string())?;
     let tmp = final_path.with_extension("json.tmp");
