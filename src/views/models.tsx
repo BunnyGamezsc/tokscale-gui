@@ -148,14 +148,28 @@ export function ModelsView() {
                 onClick={drillable ? () => setDrill(e) : undefined}
                 className={`h-row border-border/50 ${drillable ? "cursor-pointer" : ""}`}
               >
-                {COLS.map((c) => (
+                {COLS.map((c, col) => (
                   <TableCell
                     key={c.key}
                     className={`py-0 ${
                       c.numeric ? "tnum text-right font-mono" : ""
                     } ${c.numeric && c.key !== "cost" ? "text-muted-foreground" : ""}`}
                   >
-                    {c.render(e)}
+                    {/* Same shape as Daily: the whole row takes the click, the
+                        first cell carries the control the keyboard can reach and
+                        a screen reader can name. A Group-By with no finer axis
+                        does not drill, so it gets no button either. */}
+                    {col === 0 && drillable ? (
+                      <button
+                        className="text-left"
+                        aria-label={`${e.model}, breakdown`}
+                        onClick={() => setDrill(e)}
+                      >
+                        {c.render(e)}
+                      </button>
+                    ) : (
+                      c.render(e)
+                    )}
                   </TableCell>
                 ))}
               </TableRow>

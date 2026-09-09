@@ -1,8 +1,63 @@
-import { useEffect, useRef, useState } from "react";
-import { keepPreviousData, skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  keepPreviousData,
+  skipToken,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import * as api from "./api";
 import { asArg, NO_FILTER, useFilter } from "./filter";
 import { graphState, PENDING_DELAY_MS, type GraphState } from "./graph-pending";
+
+/** Refresh has exactly one owner, and it is not a `useScan` call.
+ *
+ *  `force` and `abandoned` are *window* state: the shell binds a key to Refresh
+ *  and no View is guaranteed to be mounted under it, but a second `useScan` to
+ *  give the shell a handle would bring a second elapsed timer, its own Abandon
+ *  state, and a second `force` flag that could swallow the Refresh the key just
+ *  asked for. So the two flags live here, in the module, and every entrance —
+ *  Overview's button, the Failed and Abandoned gates, and `R` — goes through
+ *  `refreshScan`. Same shape as `lib/filter.ts`, for the same reason: one per
+ *  window, read from trees that do not share a parent.
+ */
+let force = false;
+let abandoned = false;
+const listeners = new Set<() => void>();
+
+function set(next: boolean) {
+  abandoned = next;
+  for (const l of listeners) l();
+}
+
+function useAbandoned() {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => {
+        listeners.delete(l);
+      };
+    },
+    () => abandoned,
+  );
+}
+
+export const abandonScan = () => set(true);
+
+/** Rescan. The one path that must actually re-parse: a new Snapshot makes every
+ *  report read from the old one stale, so the whole cache goes with it. */
+export function refreshScan(qc: QueryClient) {
+  set(false);
+  force = true;
+  qc.invalidateQueries();
+}
+
+/** Refresh, from anywhere — the shell's `R` binding included. */
+export function useRefresh() {
+  const qc = useQueryClient();
+  // Stable, because the shell hangs its `keydown` listener off it.
+  return useCallback(() => refreshScan(qc), [qc]);
+}
 
 /** The Snapshot's lifecycle, as the views see it.
  *
@@ -13,15 +68,14 @@ import { graphState, PENDING_DELAY_MS, type GraphState } from "./graph-pending";
  */
 export function useScan() {
   const qc = useQueryClient();
-  const [abandoned, setAbandoned] = useState(false);
+  const abandoned = useAbandoned();
   const [elapsed, setElapsed] = useState(0);
 
-  const force = useRef(false);
   const query = useQuery({
     queryKey: ["scan"],
     queryFn: async () => {
-      const forced = force.current;
-      force.current = false;
+      const forced = force;
+      force = false;
       return api.scan(undefined, forced);
     },
     staleTime: Infinity,
@@ -51,14 +105,8 @@ export function useScan() {
     // The last run's duration is the only ETA worth showing, and the query keeps
     // it across a refetch.
     etaSeconds: query.data?.elapsedMs ? Math.round(query.data.elapsedMs / 1000) : null,
-    abandon: () => setAbandoned(true),
-    refresh: () => {
-      setAbandoned(false);
-      // Refresh is the one path that must actually rescan; a new Snapshot makes
-      // every report read from it stale.
-      force.current = true;
-      qc.invalidateQueries();
-    },
+    abandon: abandonScan,
+    refresh: () => refreshScan(qc),
   };
 }
 

@@ -33,6 +33,8 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 - React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui. pnpm.
 - TanStack **Router and Query only**. Table, Charts and Hotkeys were considered and never
   installed — Models hand-rolls sorting over 38–198 Entries, and the graph is hand-rolled SVG.
+  #31 re-tested the Hotkeys half against a real binding set and it still holds: seven
+  bindings, one `keydown` listener, one pure resolver. See ADR 0003.
 - The IPC boundary is **hand-written DTOs** in `src-tauri/src/dto.rs`, uniformly camelCase.
   `tauri-specta` was researched and rejected: P1 reads 15 fields rather than the ~150 that
   made generation look worthwhile, and `#[specta(remote)]` hits the orphan rule from the GUI
@@ -95,7 +97,7 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 
 Overview, Models, Daily, Stats and Pricing views. Scan/report command surface. Design system
 and theming. Contribution graph. Manual pricing overrides. The Report Filter in the window
-chrome, shared across Views.
+chrome, shared across Views. The keyboard surface and its Shortcuts sheet.
 
 ## Open
 
@@ -138,12 +140,30 @@ Roughly in the order they bite.
      days and weeks. Clicking or activating a cell opens the same Daily Detail a Daily row
      does — `useDayDialog`, now shared by all three Views.
 
-4. **Keyboard surface.** No hotkey library is installed and there is no ⌘K palette. Decide
-   whether a five-destination window needs more than a few `keydown` listeners, which of
-   upstream's TUI bindings survive the port (most exist because a terminal has no sidebar —
-   `client_ui.rs` exhausts lowercase Latin assigning one character per client), and whether
-   ⌘K is the discovery surface, a search over Models/Workspaces/Sessions, or both. Note `j`
-   is not a filter: it scrolls Daily to today.
+4. ~~**Keyboard surface.**~~ Settled by #31 and written up in ADR 0003, which carries the
+   per-binding table. In short:
+
+   - **No hotkey library**, and the count is the argument: seven bindings — `⌘1`–`⌘5`, `R`
+     for Refresh, `?` for the Shortcuts sheet — are one `keydown` listener on the window
+     and one pure resolver in `src/lib/keys.ts`. Reopen it on a count, not a feeling.
+   - **`event.code`, not `event.key`.** Upstream spends 236 lines in `tui/keymap.rs`
+     mapping Cyrillic and Greek back to US-QWERTY positions. The webview gives that for
+     free from the physical key, so the table is not ported — the property is just chosen.
+   - **Most TUI bindings do not survive**, and the reason is nearly always that the GUI
+     already has the thing as a visible control: `s` is the Report Filter's Picker, `g` is
+     Models' Group-By tabs, `c`/`t`/`d` are its sort headers. `p`/`l` belong to
+     `applyAppearance`, not a keymap. The arrows and `Home`/`End` were already spent by #29.
+     `j` is redundant rather than misread: Daily is newest-first, so today is the first row.
+   - **The discovery surface is a Shortcuts sheet, not a ⌘K palette.** A palette reaches
+     commands you cannot see; this window's are five links, a button and the Filter, all on
+     screen. Palette-as-search over Models/Workspaces/Sessions stays open for P2 — it needs
+     a Snapshot, so it is empty on the first run this list opens with. The sheet reads the
+     same `BINDINGS` the resolver does, so the app cannot describe a binding it lacks.
+   - **An interactive row keeps its click and gains a button** in its first cell. Daily's
+     and Models' rows were pointer-only; a focusable `<tr>` would cost the tab order one
+     stop per row, up to 198.
+   - **Refresh has one owner.** `force` and `abandoned` are module state in `use-scan.ts`
+     now, behind `refreshScan`, for the reason `useScanLanded` already existed.
 
 5. **Scan-time vs report-time Client selection.** Two different operations share one word.
    Turning a Client off *for scanning* changes what the corpus is and costs a full rescan;

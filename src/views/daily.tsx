@@ -68,7 +68,21 @@ export function DailyView() {
                   onClick={() => dayDialog.open(d.date)}
                   className="h-row cursor-pointer border-border/50"
                 >
-                  <TableCell className="py-0 font-mono">{d.date}</TableCell>
+                  <TableCell className="py-0 font-mono">
+                    {/* The row stays the pointer's hit target, which is what the
+                        click behaviour already implied; the keyboard and the
+                        screen reader get a real button in the first cell. The
+                        alternative — `tabIndex` and a key handler on the `<tr>`
+                        — makes a row that announces as a row and behaves as a
+                        control, and costs the tab order one stop per day. */}
+                    <button
+                      className="text-left"
+                      aria-label={`${d.date}, breakdown`}
+                      onClick={() => dayDialog.open(d.date)}
+                    >
+                      {d.date}
+                    </button>
+                  </TableCell>
                   <TableCell className="tnum py-0 text-right font-mono text-muted-foreground">
                     {fmtTokens(d.tokens)}
                   </TableCell>

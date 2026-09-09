@@ -201,6 +201,16 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Focus is visible wherever it lands (#31). One base rule, because most of
+     what is focusable here is a bare element: the sidebar's links, Models' sort
+     headers, the graph's year picker, the Shortcuts sheet's way in, and the
+     drill-down buttons in Daily's and Models' first column. Controls that paint
+     their own ring — shadcn's Button, the graph's cells — declare it in the
+     utilities layer, which wins over this. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
   html {
     @apply font-sans;
   }
