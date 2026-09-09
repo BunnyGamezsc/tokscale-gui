@@ -8,12 +8,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ViewHeader, Tiles } from "@/components/view";
-import { DetailDialog, useDayDetail } from "@/components/detail";
+import { useDayDialog } from "@/components/detail";
 import { RowSkeleton, Replacing } from "@/components/states";
 import { useGraph, useGraphState } from "@/lib/use-scan";
 import { useSnapshot } from "@/views/snapshot";
 import { fmtCost, fmtTokens } from "@/lib/format";
-import { useState } from "react";
 
 export function DailyView() {
   const snap = useSnapshot();
@@ -25,9 +24,7 @@ export function DailyView() {
   // Snapshot, not by a second `graph_report`: the day totals agree exactly
   // (`daily_detail_agrees_with_the_daily_row`), and this way the dialog costs
   // 41-100 ms instead of re-entering a 1.3-15 s parse.
-  const [day, setDay] = useState<string | null>(null);
-  const detail = useDayDetail(day);
-  const openCost = (graph.data ?? []).find((d) => d.date === day)?.cost;
+  const dayDialog = useDayDialog(graph.data ?? []);
 
   if (snap.gate) return snap.gate;
 
@@ -68,7 +65,7 @@ export function DailyView() {
               days.map((d) => (
                 <TableRow
                   key={d.date}
-                  onClick={() => setDay(d.date)}
+                  onClick={() => dayDialog.open(d.date)}
                   className="h-row cursor-pointer border-border/50"
                 >
                   <TableCell className="py-0 font-mono">{d.date}</TableCell>
@@ -106,15 +103,7 @@ export function DailyView() {
         </Table>
       </Replacing>
 
-      {day && (
-        <DetailDialog
-          title={`Daily detail: ${day}`}
-          aside={openCost !== undefined ? fmtCost(openCost) : ""}
-          entries={detail.data?.entries ?? []}
-          pending={detail.isPending}
-          onClose={() => setDay(null)}
-        />
-      )}
+      {dayDialog.dialog}
     </>
   );
 }

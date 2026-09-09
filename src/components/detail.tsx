@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Table,
@@ -12,7 +12,7 @@ import {
 import { RowSkeleton } from "@/components/states";
 import * as api from "@/lib/api";
 import { asArg, useFilter } from "@/lib/filter";
-import type { Entry, GroupBy } from "@/lib/api";
+import type { Day, Entry, GroupBy } from "@/lib/api";
 import { fmtCost, fmtInt, fmtTokens } from "@/lib/format";
 
 /** A row's detail: **what this row is made of**, one axis finer.
@@ -62,6 +62,33 @@ export function useDayDetail(date: string | null) {
     enabled: date !== null,
     staleTime: Infinity,
   });
+}
+
+/** A day's breakdown, opened from anywhere a day is drawn.
+ *
+ *  Three Views open the same dialog now: Daily from a table row, and Overview
+ *  and Stats from a Contribution Graph cell, by click or by keyboard (#29). One
+ *  hook rather than three copies, because the contract they share is the one the
+ *  dialog exists to keep — the total equals the figure on what opened it — and
+ *  `days` is what carries that figure.
+ */
+export function useDayDialog(days: Day[]) {
+  const [day, setDay] = useState<string | null>(null);
+  const detail = useDayDetail(day);
+  const opened = days.find((d) => d.date === day);
+
+  return {
+    open: setDay,
+    dialog: day && (
+      <DetailDialog
+        title={`Daily detail: ${day}`}
+        aside={opened ? fmtCost(opened.cost) : ""}
+        entries={detail.data?.entries ?? []}
+        pending={detail.isPending}
+        onClose={() => setDay(null)}
+      />
+    ),
+  };
 }
 
 export function useRowDetail(row: Entry | null, groupBy: GroupBy, ready: boolean) {

@@ -99,9 +99,13 @@ Daily, Hourly, Stats, Agents, and a hidden Minutely.
 **Agents** — upstream's name for the view breaking usage down by client. Retained
 despite the tension with **Client**, because renaming it would diverge from tokscale.
 
-**Contribution Graph** — the GitHub-style calendar heatmap on the Stats view. Its
+**Contribution Graph** — the GitHub-style calendar heatmap, on Overview and Stats. Its
 color **Ramp** is the sequence of discrete intensity steps mapping a day's usage to a
-color.
+color. It is bounded to one calendar year, January 1st to December 31st, with a year
+picker when the corpus spans more than one (#29) — the same bound `calculate_years` uses,
+rather than upstream's trailing 52 weeks. It is a real calendar: `graph_report` sends only
+the days that had messages, and the days in between are filled in view-side as **absence**,
+which is `--ramp-0` and not a Ramp step.
 
 **Replacing** — a View whose data is one question old: a Report Filter edit re-keyed
 its query and the answer has not landed yet. The old answer stays on screen, dimmed and

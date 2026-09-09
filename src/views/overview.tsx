@@ -7,17 +7,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ContributionGraph, RampLegend } from "@/components/contribution-graph";
+import { ContributionGraph, RampLegend, GRAPH_HEIGHT } from "@/components/contribution-graph";
 import { ViewHeader, Tiles, SectionHead } from "@/components/view";
 import { RowSkeleton } from "@/components/states";
 import { useReport, useGraph } from "@/lib/use-scan";
 import { useSnapshot } from "@/views/snapshot";
+import { useDayDialog } from "@/components/detail";
 import { fmtCost, fmtInt, fmtTokens } from "@/lib/format";
 
 export function OverviewView() {
   const snap = useSnapshot();
   const report = useReport("model", snap.ready);
   const graph = useGraph(snap.ready);
+  const dayDialog = useDayDialog(graph.data ?? []);
 
   if (snap.gate) return snap.gate;
 
@@ -44,8 +46,8 @@ export function OverviewView() {
 
       <section className="mt-5">
         <SectionHead title="Contribution graph" aside={days.length ? `${active} active days` : ""} />
-        <div className="mt-3 min-h-[86px] overflow-x-auto">
-          <ContributionGraph days={days} />
+        <div className="mt-3 overflow-x-auto" style={{ minHeight: GRAPH_HEIGHT }}>
+          <ContributionGraph days={days} onSelect={dayDialog.open} />
         </div>
         {days.length > 0 && (
           <div className="mt-2.5 flex items-center gap-2 text-micro text-muted-foreground">
@@ -96,6 +98,8 @@ export function OverviewView() {
           </TableBody>
         </Table>
       </section>
+
+      {dayDialog.dialog}
     </>
   );
 }

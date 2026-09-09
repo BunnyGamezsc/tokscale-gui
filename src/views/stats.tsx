@@ -1,16 +1,19 @@
-import { ContributionGraph, RampLegend } from "@/components/contribution-graph";
+import { ContributionGraph, RampLegend, GRAPH_HEIGHT } from "@/components/contribution-graph";
 import { ViewHeader, Tiles, SectionHead } from "@/components/view";
 import { useGraph, useGraphState, useClients } from "@/lib/use-scan";
 import { Replacing } from "@/components/states";
 import { useSnapshot } from "@/views/snapshot";
 import { fmtCost, fmtInt, fmtTokens } from "@/lib/format";
 import { longestStreak } from "@/lib/streak";
+import { calendarSpan } from "@/lib/calendar";
+import { useDayDialog } from "@/components/detail";
 
 export function StatsView() {
   const snap = useSnapshot();
   const graph = useGraph(snap.ready);
   const clients = useClients(snap.ready);
   const graphState = useGraphState(graph);
+  const dayDialog = useDayDialog(graph.data ?? []);
 
   if (snap.gate) return snap.gate;
 
@@ -29,7 +32,11 @@ export function StatsView() {
         <Tiles
           items={[
             ["Active days", days.length ? `${active.length}/${days.length}` : "—"],
-            ["Longest streak", days.length ? `${longestStreak(days.map((d) => d.level))}d` : "—"],
+            // Over the calendar, not over the rows — see `calendarSpan`.
+            [
+              "Longest streak",
+              days.length ? `${longestStreak(calendarSpan(days).map((d) => d.level))}d` : "—",
+            ],
             ["Cost per active day", active.length ? fmtCost(totalCost / active.length) : "—"],
             ["Tokens", days.length ? fmtTokens(totalTokens) : "—"],
           ]}
@@ -42,15 +49,13 @@ export function StatsView() {
             title="Contribution graph"
             aside={days.length ? `${active.length} active days` : ""}
           />
-          <div className="mt-3 min-h-[110px] overflow-x-auto">
+          <div className="mt-3 overflow-x-auto" style={{ minHeight: GRAPH_HEIGHT }}>
             {/* The empty grid rather than nothing: the panel is already the
                 right height, so what pops today is the grid's appearance. */}
             <ContributionGraph
               days={days}
               pending={graphState === "waiting"}
-              cell={13}
-              gap={3}
-              radius={2}
+              onSelect={dayDialog.open}
             />
           </div>
           {/* The legend needs no data, so it holds through the pending state
@@ -58,7 +63,7 @@ export function StatsView() {
           {(days.length > 0 || graphState === "waiting") && (
             <div className="mt-3 flex items-center gap-2 text-micro text-muted-foreground">
               <span>Less</span>
-              <RampLegend cell={13} gap={3} radius={2} />
+              <RampLegend />
               <span>More</span>
             </div>
           )}
@@ -85,6 +90,8 @@ export function StatsView() {
           </div>
         </section>
       </Replacing>
+
+      {dayDialog.dialog}
     </>
   );
 }

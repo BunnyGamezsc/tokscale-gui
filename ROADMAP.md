@@ -116,13 +116,27 @@ Roughly in the order they bite.
    warms the graph path, so the first visit to Daily costs 0.28–0.76 s, not 15 s. The fork
    does not widen; what is left is showing that sub-second pending state honestly — #32.
 
-3. **Contribution graph rendering and interaction.** Ramp bucketing is settled (#25): a
-   logarithm across the active span, which beat core's ratio thresholds and the TUI's clamped
-   ratio because both are linear in dollars and strand nine tenths of a skewed month on one
-   step, and beat quantile because rank cannot tell a flat month from a skewed one. The
-   reasoning and the measured histograms live on `ramp_level` in `commands.rs`. Still open:
-   cell sizing and whether the grid is responsive, how a year is bounded and multiple years
-   navigated, and hover beyond the native `<title>`.
+3. ~~**Contribution graph rendering and interaction.**~~ Settled by #29, on top of #25's
+   bucketing (a logarithm across the active span, reasoned out on `ramp_level` in
+   `commands.rs`). What #29 answered:
+
+   - **The grid is a calendar.** `graph_report` returns only the days that had messages —
+     core's `DailyFold` is a HashMap and `finish()` maps just its entries — so laying them
+     out by index drew columns that were not weeks. `src/lib/calendar.ts` fills the gaps on
+     the way into the grid: pure, tested by the #24 runner, and the commands keep returning
+     what actually happened. It is also the only thing that makes `--ramp-0` reachable from
+     data, since a day with no messages is never in the fold.
+   - **A year is a calendar year**, Jan 1 to Dec 31, which is the bound `calculate_years`
+     already uses. A trailing 52 weeks was the alternative and is what upstream draws; a
+     fixed bound wins because it makes the width a constant. A year picker appears when the
+     corpus spans more than one, so old usage is reachable.
+   - **One cell size, 10/2/1**, replacing Overview's 10/2/1 and Stats' 13/3/2. A bounded
+     year is at most 54 columns and the content column at the 880px minimum is 652px, so
+     646px fits with no responsive branch. `GRAPH_HEIGHT` is derived, not hand-computed.
+   - **Cells are buttons in a CSS grid, not SVG rects.** Focus ring, accessible name and
+     Enter/Space are the platform's. A roving tabindex keeps it to one tab stop; arrows walk
+     days and weeks. Clicking or activating a cell opens the same Daily Detail a Daily row
+     does — `useDayDialog`, now shared by all three Views.
 
 4. **Keyboard surface.** No hotkey library is installed and there is no ⌘K palette. Decide
    whether a five-destination window needs more than a few `keydown` listeners, which of
