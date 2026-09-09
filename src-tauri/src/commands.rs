@@ -189,30 +189,25 @@ pub async fn model_report(
 ///
 /// **The bucketing is logarithmic across the active span**: `t = ln(cost/min) /
 /// ln(max/min)` over the active days, cut into five. Ticket 25 measured the
-/// three candidates against a deliberately skewed 90 days (min $0.011, median
-/// $0.41, max $41.50 — one dominant day), counting days per step:
+/// three candidates against `skewed()` in the tests below — 85 days spanning
+/// three and a third decades, $0.02 to $41.50 with a median of $0.86, one day
+/// dominating — counting days per step:
 ///
 /// | candidate                             | 1  | 2  | 3  | 4  | 5  |
 /// | ------------------------------------- | -- | -- | -- | -- | -- |
-/// | core's ratio thresholds (¼, ½, ¾)      | 89 |  0 |  0 |  1 |  0 |
-/// | the TUI's clamped continuous ratio    | 89 |  0 |  0 |  0 |  1 |
-/// | quantile — rank cut into fifths       | 18 | 18 | 18 | 18 | 18 |
-/// | **logarithmic across the span**       | 13 | 28 | 42 |  6 |  1 |
+/// | core's ratio thresholds (¼, ½, ¾)      | 83 |  1 |  0 |  1 |  0 |
+/// | the TUI's clamped continuous ratio    | 83 |  1 |  0 |  0 |  1 |
+/// | quantile — rank cut into fifths       | 17 | 17 | 17 | 17 | 17 |
+/// | **logarithmic across the span**       |  4 | 17 | 59 |  3 |  2 |
 ///
-/// Both rivals are linear in dollars against the busiest day, so a spread of
-/// three and a half decades draws as two shades: 89 of 90 days indistinguishable.
-/// That is the collapse the placeholder existed to avoid.
-///
-/// On the author's real corpus — 70 active days from $0.0058 to $104.67, four
-/// and a quarter decades — the shipped function fills every step: 4 / 6 / 9 /
-/// 36 / 15, busiest day at 5. Quantile would have drawn 14 / 14 / 14 / 14 / 14
-/// there, as it draws everywhere.
-///
-/// Quantile does not collapse — but it cannot, and that is the objection. It
-/// reports *rank*, not size, so it emits exactly a fifth of the days per step
-/// whatever the costs are: a flat month and a savagely skewed one draw the same
-/// picture. Logarithmic encodes magnitude instead — one step is a fixed factor
-/// in dollars — so the graph changes when the spending does.
+/// Both rivals are linear in dollars against the busiest day, so the dominant
+/// day draws the other 83 as one shade — the collapse the placeholder existed
+/// to avoid. Quantile does not collapse, but it reports *rank* rather than
+/// size: exactly a fifth of the days per step whatever the costs are, so a flat
+/// month and a savagely skewed one draw the same picture. The logarithm encodes
+/// magnitude instead — one step is a fixed factor in dollars — so the graph
+/// changes when the spending does. On the author's real corpus (70 active days,
+/// $0.0058 to $104.67) it fills every step: 4 / 6 / 9 / 36 / 15.
 ///
 /// **A distribution with no spread is not required to fill five steps.** When
 /// every active day costs the same (including the case of a single active day)
@@ -668,32 +663,6 @@ mod tests {
         }
     }
 
-    /// The rivals, on the same distribution, for the record. Core's ratio
-    /// thresholds and the TUI's clamped ratio are both linear in dollars
-    /// against the busiest day, so the dominant day flattens everything else
-    /// into one shade.
-    #[test]
-    fn the_linear_rivals_collapse_where_the_logarithm_does_not() {
-        let active = skewed();
-        let max = active.iter().copied().fold(0.0f64, f64::max);
-
-        let linear_bottom = active
-            .iter()
-            .filter(|c| (**c / max * 5.0).ceil().max(1.0) as u8 == 1)
-            .count();
-        assert!(
-            linear_bottom * 10 >= active.len() * 9,
-            "a clamped ratio strands over nine tenths of the month on the bottom \
-             step: {linear_bottom} of {}",
-            active.len()
-        );
-
-        assert!(
-            histogram(&active)[1] < linear_bottom / 2,
-            "the logarithm must spread what the ratio flattens"
-        );
-    }
-
     /// Absence is not a step (ROADMAP: `--ramp-0` is absence). A day with no
     /// usage must never collide with the cheapest active day.
     #[test]
@@ -742,8 +711,7 @@ mod tests {
         let active = vec![0.05, 0.20, 0.80, 3.20, 500.0];
         let levels: Vec<u8> = active.iter().map(|c| ramp_level(&active, *c)).collect();
 
-        assert_eq!(levels[4], 5, "the dominant day tops out");
-        assert_eq!(levels[4..], [5], "and is alone up there");
+        assert_eq!(levels[4..], [5], "the dominant day tops out, alone");
 
         let ordinary: std::collections::BTreeSet<u8> = levels[..4].iter().copied().collect();
         assert!(
