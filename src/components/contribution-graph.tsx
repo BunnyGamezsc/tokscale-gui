@@ -1,10 +1,10 @@
 import type { Day } from "@/lib/api";
 
 /** The Contribution Graph, hand-rolled in SVG per the map's standing decision to
- *  keep it out of TanStack Charts' alpha churn. Ticket 12 owns the real
- *  rendering and interaction questions — cell sizing, year bounding, hover, and
- *  how the Ramp buckets a heavily skewed distribution. This is the rendering the
- *  Stats and Overview views need to exist at all.
+ *  keep it out of TanStack Charts' alpha churn. Roadmap item 3 owns the
+ *  remaining rendering and interaction questions — cell sizing, year bounding
+ *  and hover. Bucketing is not one of them: #25 settled it in `ramp_level`, and
+ *  this component only reads `d.level`.
  *
  *  The Ramp comes from `--ramp-1` .. `--ramp-5`; a day with no usage is not a
  *  step and uses `--ramp-0`. */

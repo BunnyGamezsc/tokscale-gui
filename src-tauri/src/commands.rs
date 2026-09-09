@@ -13,9 +13,9 @@ use std::time::Instant;
 
 use tokscale_core::{
     aggregate_model_usage_entries_with_rollup, filter_messages_for_report,
-    generate_local_graph_report, model_report_token_totals, parse_local_unified_messages_with_pricing,
-    pricing::PricingService, GroupBy, LocalParseOptions, ReportOptions, UnifiedMessage,
-    WorktreeRollup,
+    generate_local_graph_report, model_report_token_totals,
+    parse_local_unified_messages_with_pricing, pricing::PricingService, GroupBy, LocalParseOptions,
+    ReportOptions, UnifiedMessage, WorktreeRollup,
 };
 
 use crate::dto::{Client, Day, Entry, Report, ScanSummary, Unpriced};
@@ -120,11 +120,8 @@ pub async fn scan(
             // so a rate entered in this session would not show up until restart.
             match crate::pricing::reloaded() {
                 Some(fresh) => {
-                    parse_local_unified_messages_with_pricing(
-                        filter.parse_options(),
-                        Some(&fresh),
-                    )
-                    .await
+                    parse_local_unified_messages_with_pricing(filter.parse_options(), Some(&fresh))
+                        .await
                 }
                 None => {
                     // No upstream pricing cached on disk yet, so this is the
@@ -184,6 +181,66 @@ pub async fn model_report(
     })
 }
 
+/// Which Ramp step a day's cost falls on, given every active day's cost.
+///
+/// Absence is not a step. A zero-cost day is `0` — `--ramp-0`, which the graph
+/// renders as "no usage" — and never shares a value with the cheapest active
+/// day, which is `1`.
+///
+/// **The bucketing is logarithmic across the active span**: `t = ln(cost/min) /
+/// ln(max/min)` over the active days, cut into five. Ticket 25 measured the
+/// three candidates against a deliberately skewed 90 days (min $0.011, median
+/// $0.41, max $41.50 — one dominant day), counting days per step:
+///
+/// | candidate                             | 1  | 2  | 3  | 4  | 5  |
+/// | ------------------------------------- | -- | -- | -- | -- | -- |
+/// | core's ratio thresholds (¼, ½, ¾)      | 89 |  0 |  0 |  1 |  0 |
+/// | the TUI's clamped continuous ratio    | 89 |  0 |  0 |  0 |  1 |
+/// | quantile — rank cut into fifths       | 18 | 18 | 18 | 18 | 18 |
+/// | **logarithmic across the span**       | 13 | 28 | 42 |  6 |  1 |
+///
+/// Both rivals are linear in dollars against the busiest day, so a spread of
+/// three and a half decades draws as two shades: 89 of 90 days indistinguishable.
+/// That is the collapse the placeholder existed to avoid.
+///
+/// On the author's real corpus — 70 active days from $0.0058 to $104.67, four
+/// and a quarter decades — the shipped function fills every step: 4 / 6 / 9 /
+/// 36 / 15, busiest day at 5. Quantile would have drawn 14 / 14 / 14 / 14 / 14
+/// there, as it draws everywhere.
+///
+/// Quantile does not collapse — but it cannot, and that is the objection. It
+/// reports *rank*, not size, so it emits exactly a fifth of the days per step
+/// whatever the costs are: a flat month and a savagely skewed one draw the same
+/// picture. Logarithmic encodes magnitude instead — one step is a fixed factor
+/// in dollars — so the graph changes when the spending does.
+///
+/// **A distribution with no spread is not required to fill five steps.** When
+/// every active day costs the same (including the case of a single active day)
+/// `max == min`, there is no ordering to draw and every active day *is* the
+/// busiest day, so every one of them is step 5. Only a distribution that
+/// actually has spread is held to populating the whole Ramp — which is why
+/// quantile's answer for these cases (every day ranks 0, so every day lands on
+/// the *bottom* step, the busiest included) is wrong rather than merely
+/// arbitrary.
+pub fn ramp_level(active: &[f64], cost: f64) -> u8 {
+    if cost <= 0.0 {
+        return 0;
+    }
+    let (min, max) = active
+        .iter()
+        .copied()
+        .filter(|c| *c > 0.0)
+        .fold((f64::INFINITY, 0.0f64), |(lo, hi), c| {
+            (lo.min(c), hi.max(c))
+        });
+    if max <= min {
+        return 5;
+    }
+    ((cost / min).ln() / (max / min).ln() * 5.0)
+        .ceil()
+        .clamp(1.0, 5.0) as u8
+}
+
 /// The Contribution Graph's days.
 ///
 /// The one asymmetry in the surface (ticket 09): this cannot be served from the
@@ -201,34 +258,19 @@ pub async fn graph_report(filter: Option<Filter>) -> Result<Vec<Day>, String> {
     })
     .await?;
 
-    // Ramp bucketing is provisional and belongs to ticket 12. Core's own
-    // `intensity` is a 0-4 linear split on cost relative to the busiest day,
-    // which collapses under the skew real usage has. Ranking active days and
-    // cutting into fifths keeps all five steps populated; whether the shipped
-    // answer is quantile, logarithmic or something else is 12's call.
-    let mut active: Vec<f64> = result
+    let active: Vec<f64> = result
         .contributions
         .iter()
         .map(|c| c.totals.cost)
         .filter(|c| *c > 0.0)
         .collect();
-    active.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-    let level_of = |cost: f64| -> u8 {
-        if cost <= 0.0 || active.is_empty() {
-            return 0;
-        }
-        let rank = active.partition_point(|c| *c < cost);
-        let step = (rank * 5) / active.len();
-        (step.min(4) + 1) as u8
-    };
 
     Ok(result
         .contributions
         .iter()
         .map(|c| Day {
             date: c.date.clone(),
-            level: level_of(c.totals.cost),
+            level: ramp_level(&active, c.totals.cost),
             cost: c.totals.cost,
             tokens: c.totals.tokens,
         })
@@ -261,7 +303,11 @@ pub async fn clients(state: tauri::State<'_, Snapshot>) -> Result<Vec<Client>, S
     }
 
     let mut out: Vec<Client> = by_client.into_values().collect();
-    out.sort_by(|a, b| b.cost.partial_cmp(&a.cost).unwrap_or(std::cmp::Ordering::Equal));
+    out.sort_by(|a, b| {
+        b.cost
+            .partial_cmp(&a.cost)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(out)
 }
 
@@ -318,9 +364,10 @@ pub async fn unpriced(state: tauri::State<'_, Snapshot>) -> Result<Vec<Unpriced>
 
 #[cfg(test)]
 mod tests {
-    //! Ticket 11's evidence. These pin what a Report Filter can and cannot do
-    //! against the *held* Snapshot, which is the whole question of whether
-    //! narrowing re-aggregates or rescans.
+    //! Ticket 11's evidence — what a Report Filter can and cannot do against
+    //! the *held* Snapshot, which is the whole question of whether narrowing
+    //! re-aggregates or rescans — followed by ticket 25's, which settles the
+    //! Ramp bucketing without running a Scan.
 
     use super::*;
     use tokscale_core::TokenBreakdown;
@@ -485,12 +532,17 @@ mod tests {
         );
         let fine = aggregate_model_usage_entries_with_rollup(
             corpus,
-            &"client,provider,model".parse::<GroupBy>().expect("group-by"),
+            &"client,provider,model"
+                .parse::<GroupBy>()
+                .expect("group-by"),
             WorktreeRollup::default(),
         );
 
         assert_eq!(coarse.len(), 2, "two models");
-        assert!(fine.len() > coarse.len(), "finer axis must split at least one row");
+        assert!(
+            fine.len() > coarse.len(),
+            "finer axis must split at least one row"
+        );
 
         for row in &coarse {
             let parts: Vec<_> = fine.iter().filter(|f| f.model == row.model).collect();
@@ -554,7 +606,9 @@ mod tests {
                 ..Default::default()
             };
             let options = f.report_options(
-                "client,provider,model".parse::<GroupBy>().expect("group-by"),
+                "client,provider,model"
+                    .parse::<GroupBy>()
+                    .expect("group-by"),
             );
             let kept = filter_messages_for_report(snapshot.clone(), &options);
             let entries = aggregate_model_usage_entries_with_rollup(
@@ -584,5 +638,121 @@ mod tests {
         println!("checked {checked} active days, worst delta {worst:.9}");
         assert!(checked > 0, "no active days to check");
         assert!(worst < 1e-6, "dialog and row disagree by {worst}");
+    }
+
+    // ---- Ticket 25: Ramp bucketing ----
+
+    /// A skewed month: eighty cheap days, a few heavy ones, and one that dwarfs
+    /// them all. The case the placeholder existed for, and the only one held to
+    /// filling the whole Ramp.
+    fn skewed() -> Vec<f64> {
+        let mut costs: Vec<f64> = (1..=80).map(|i| i as f64 * 0.02).collect();
+        costs.extend([3.0, 4.5, 6.0, 12.0, 41.5]);
+        costs
+    }
+
+    fn histogram(active: &[f64]) -> [usize; 6] {
+        let mut h = [0usize; 6];
+        for c in active {
+            h[ramp_level(active, *c) as usize] += 1;
+        }
+        h
+    }
+
+    #[test]
+    fn a_skewed_distribution_populates_every_step() {
+        let h = histogram(&skewed());
+        assert_eq!(h[0], 0, "no zero-cost days in this fixture");
+        for step in 1..=5 {
+            assert!(h[step] > 0, "step {step} is empty: {h:?}");
+        }
+    }
+
+    /// The rivals, on the same distribution, for the record. Core's ratio
+    /// thresholds and the TUI's clamped ratio are both linear in dollars
+    /// against the busiest day, so the dominant day flattens everything else
+    /// into one shade.
+    #[test]
+    fn the_linear_rivals_collapse_where_the_logarithm_does_not() {
+        let active = skewed();
+        let max = active.iter().copied().fold(0.0f64, f64::max);
+
+        let linear_bottom = active
+            .iter()
+            .filter(|c| (**c / max * 5.0).ceil().max(1.0) as u8 == 1)
+            .count();
+        assert!(
+            linear_bottom * 10 >= active.len() * 9,
+            "a clamped ratio strands over nine tenths of the month on the bottom \
+             step: {linear_bottom} of {}",
+            active.len()
+        );
+
+        assert!(
+            histogram(&active)[1] < linear_bottom / 2,
+            "the logarithm must spread what the ratio flattens"
+        );
+    }
+
+    /// Absence is not a step (ROADMAP: `--ramp-0` is absence). A day with no
+    /// usage must never collide with the cheapest active day.
+    #[test]
+    fn a_day_with_no_usage_is_not_the_lowest_step() {
+        let active = skewed();
+        assert_eq!(ramp_level(&active, 0.0), 0);
+        assert_eq!(ramp_level(&active, -0.0), 0);
+        let cheapest = active.iter().copied().fold(f64::INFINITY, f64::min);
+        assert_eq!(ramp_level(&active, cheapest), 1, "cheapest active day is 1");
+    }
+
+    #[test]
+    fn the_busiest_day_is_always_the_top_step() {
+        for active in [skewed(), vec![7.0], vec![2.0; 30], vec![0.01, 0.01, 99.0]] {
+            let max = active.iter().copied().fold(0.0f64, f64::max);
+            assert_eq!(ramp_level(&active, max), 5, "busiest of {active:?}");
+        }
+    }
+
+    /// The degenerate distributions, decided rather than discovered: with no
+    /// spread at all, every active day is the busiest day, so every active day
+    /// is the top step. Five steps are not required to appear here.
+    #[test]
+    fn a_distribution_with_no_spread_is_all_top_step() {
+        assert_eq!(ramp_level(&[9.0], 9.0), 5, "a single active day");
+        let flat = vec![2.0; 12];
+        assert!(
+            flat.iter().all(|c| ramp_level(&flat, *c) == 5),
+            "all active days equal"
+        );
+        assert_eq!(
+            ramp_level(&flat, 0.0),
+            0,
+            "absence survives the degenerate case"
+        );
+    }
+
+    /// One day dominating the rest must not drag the rest into a single step.
+    /// A ten-thousand-fold outlier is exactly what defeats the linear rivals —
+    /// under a clamped ratio all four ordinary days are step 1. The logarithm
+    /// still separates them, though not one step each: with the span stretched
+    /// over four decades a step is ~6x, so days within 6x of each other share
+    /// one. That is the bucketing telling the truth about the distribution.
+    #[test]
+    fn one_dominant_day_does_not_flatten_the_rest() {
+        let active = vec![0.05, 0.20, 0.80, 3.20, 500.0];
+        let levels: Vec<u8> = active.iter().map(|c| ramp_level(&active, *c)).collect();
+
+        assert_eq!(levels[4], 5, "the dominant day tops out");
+        assert_eq!(levels[4..], [5], "and is alone up there");
+
+        let ordinary: std::collections::BTreeSet<u8> = levels[..4].iter().copied().collect();
+        assert!(
+            ordinary.len() >= 3,
+            "the ordinary days keep at least three distinct steps: {levels:?}"
+        );
+        assert!(
+            levels[..4].windows(2).all(|w| w[0] <= w[1]),
+            "and never invert: {levels:?}"
+        );
     }
 }

@@ -79,7 +79,7 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 ## Built
 
 Overview, Models, Daily, Stats and Pricing views. Scan/report command surface. Design system
-and theming. Contribution graph (provisional Ramp bucketing). Manual pricing overrides.
+and theming. Contribution graph. Manual pricing overrides.
 
 ## Open
 
@@ -102,10 +102,13 @@ Roughly in the order they bite.
    it does not hold, the first visit to Daily is a silent 15 s wait with nothing on screen to
    explain it. Decide whether the fork widens to serve these from the Snapshot.
 
-3. **Contribution graph rendering and interaction.** Ramp bucketing is provisional: currently
-   a rank-based split into fifths, chosen because core's linear 0–4 split collapses under real
-   skew. Settle quantile vs logarithmic, cell sizing and whether the grid is responsive, how a
-   year is bounded and multiple years navigated, and hover beyond the native `<title>`.
+3. **Contribution graph rendering and interaction.** Ramp bucketing is settled (#25): a
+   logarithm across the active span, which beat core's ratio thresholds and the TUI's clamped
+   ratio because both are linear in dollars and strand nine tenths of a skewed month on one
+   step, and beat quantile because rank cannot tell a flat month from a skewed one. The
+   reasoning and the measured histograms live on `ramp_level` in `commands.rs`. Still open:
+   cell sizing and whether the grid is responsive, how a year is bounded and multiple years
+   navigated, and hover beyond the native `<title>`.
 
 4. **Keyboard surface.** No hotkey library is installed and there is no ⌘K palette. Decide
    whether a five-destination window needs more than a few `keydown` listeners, which of
