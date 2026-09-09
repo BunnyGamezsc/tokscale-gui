@@ -126,3 +126,30 @@ export function RowSkeleton({ rows = 8, cols = 5 }: { rows?: number; cols?: numb
     </>
   );
 }
+
+/** Content that a re-run is replacing, kept on screen rather than unmounted.
+ *
+ *  Ticket 32: a Report Filter change re-keys `graph_report`, so without this the
+ *  grid would unmount and the tiles fall back to "—" for the ~30 ms the narrowed
+ *  call takes. Dimming what is already there says "this answer is one question
+ *  old" without the layout ever emptying, and goes inert so a click cannot open
+ *  a row that is about to be replaced. Only engages once the wait outruns
+ *  `PENDING_DELAY_MS` — the ~30 ms fast path is replaced before this is reached,
+ *  which is the point.
+ *
+ *  Daily and Stats both wrap their whole graph-derived body in this, which is
+ *  what makes their Filter-change behaviour identical. Overview and Models are
+ *  Snapshot-served and out of #32's scope; they still empty and refill.
+ */
+export function Replacing({ on, children }: { on: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      aria-busy={on || undefined}
+      className={
+        "transition-opacity duration-150" + (on ? " pointer-events-none opacity-45" : "")
+      }
+    >
+      {children}
+    </div>
+  );
+}

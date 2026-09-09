@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { Day } from "@/lib/api";
 
 /** The Contribution Graph, hand-rolled in SVG per the map's standing decision to
@@ -10,16 +11,21 @@ import type { Day } from "@/lib/api";
  *  step and uses `--ramp-0`. */
 export function ContributionGraph({
   days,
+  pending = false,
   cell = 10,
   gap = 2,
   radius = 1,
 }: {
   days: Day[];
+  /** Draw the grid empty instead of drawing nothing, for the first graph call
+   *  (#32). Callers with no pending state to show leave this off and still get
+   *  `null`. */
+  pending?: boolean;
   cell?: number;
   gap?: number;
   radius?: number;
 }) {
-  if (days.length === 0) return null;
+  if (days.length === 0) return pending ? <PendingGraph {...{ cell, gap, radius }} /> : null;
 
   const step = cell + gap;
   const lead = new Date(days[0].date + "T00:00:00Z").getUTCDay();
@@ -40,7 +46,7 @@ export function ContributionGraph({
         const n = lead + i;
         return (
           <rect
-            key={d.date}
+            key={d?.date ?? i}
             x={Math.floor(n / 7) * step}
             y={(n % 7) * step}
             width={cell}
@@ -54,6 +60,42 @@ export function ContributionGraph({
           </rect>
         );
       })}
+    </svg>
+  );
+}
+
+/** The grid before its data, for the ~340 ms of the first `graph_report` call.
+ *
+ *  What is knowable in advance is the cell geometry and the seven-row height —
+ *  not the column count, because `graph_report` returns the *active* days rather
+ *  than the calendar range, so a 210-day corpus can be eleven columns or thirty.
+ *  Guessing one and collapsing to the real width when the data lands would be a
+ *  second pop, and inside the callers' `overflow-x-auto` it would raise a
+ *  horizontal scrollbar that then vanished.
+ *
+ *  So this claims no width: an SVG `<pattern>` tiles the real cell over whatever
+ *  the panel is, at the exact height the grid will occupy. The shape is honest
+ *  and nothing below it moves when the days arrive. */
+function PendingGraph({ cell, gap, radius }: { cell: number; gap: number; radius: number }) {
+  const id = useId();
+  const step = cell + gap;
+  const height = 7 * step - gap;
+
+  return (
+    <svg
+      width="100%"
+      height={height}
+      role="img"
+      aria-label="Contribution graph, loading"
+      aria-busy="true"
+      className="motion-safe:animate-pulse"
+    >
+      <defs>
+        <pattern id={id} width={step} height={step} patternUnits="userSpaceOnUse">
+          <rect width={cell} height={cell} rx={radius} fill="var(--ramp-0)" />
+        </pattern>
+      </defs>
+      <rect width="100%" height={height} fill={`url(#${id})`} />
     </svg>
   );
 }

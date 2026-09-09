@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "./api";
 import { asArg, NO_FILTER, useFilter } from "./filter";
+import { graphState, PENDING_DELAY_MS, type GraphState } from "./graph-pending";
 
 /** The Snapshot's lifecycle, as the views see it.
  *
@@ -96,6 +97,10 @@ export function useGraph(ready: boolean) {
     queryFn: () => api.graphReport(asArg(filter)),
     enabled: ready,
     staleTime: Infinity,
+    // The Filter is in the key, so editing it is a *new* query: without this,
+    // `data` would go `undefined` for the ~30 ms the narrowed call takes and the
+    // grid would unmount mid-edit. Ticket 32: the stale grid stays.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -106,6 +111,10 @@ export function useClients(ready: boolean) {
     queryFn: () => api.clients(asArg(filter)),
     enabled: ready,
     staleTime: Infinity,
+    // Stats' only other query. It re-keys on the same Filter edit as the graph,
+    // so without this the By-client list would empty underneath a grid that
+    // held — half the View holding and half of it blank.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -135,4 +144,26 @@ export function useCustomPricing() {
     queryFn: () => api.customPricing(),
     staleTime: Infinity,
   });
+}
+
+/** What Daily and Stats should render for the graph call, delay included.
+ *
+ *  Lives here rather than in either View because the two have to agree: before
+ *  #32 they disagreed by accident — Daily had a skeleton on `isPending`, Stats
+ *  had no pending state at all. The decision itself is `graphState`, kept pure
+ *  and tested; this only owns the timer. */
+export function useGraphState(query: { data: unknown; isFetching: boolean }): GraphState {
+  const { isFetching } = query;
+  const [delayPassed, setDelayPassed] = useState(false);
+
+  useEffect(() => {
+    if (!isFetching) {
+      setDelayPassed(false);
+      return;
+    }
+    const id = setTimeout(() => setDelayPassed(true), PENDING_DELAY_MS);
+    return () => clearTimeout(id);
+  }, [isFetching]);
+
+  return graphState({ hasData: query.data !== undefined, isFetching }, delayPassed);
 }

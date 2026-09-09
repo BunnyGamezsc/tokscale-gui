@@ -103,6 +103,12 @@ despite the tension with **Client**, because renaming it would diverge from toks
 color **Ramp** is the sequence of discrete intensity steps mapping a day's usage to a
 color.
 
+**Replacing** — a View whose data is one question old: a Report Filter edit re-keyed
+its query and the answer has not landed yet. The old answer stays on screen, dimmed and
+inert, rather than the View emptying (#32). Distinct from **waiting**, which is the
+first call, with nothing to keep. GUI-only — upstream's TUI re-renders synchronously and
+has no name for either.
+
 **Light mode** — upstream means a light *background* for the terminal. Distinct from
 `--light`, a flag meaning *static table output instead of the interactive TUI*. The GUI
 inherits the first meaning only; the second has no GUI equivalent.

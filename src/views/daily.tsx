@@ -9,8 +9,8 @@ import {
 } from "@/components/ui/table";
 import { ViewHeader, Tiles } from "@/components/view";
 import { DetailDialog, useDayDetail } from "@/components/detail";
-import { RowSkeleton } from "@/components/states";
-import { useGraph } from "@/lib/use-scan";
+import { RowSkeleton, Replacing } from "@/components/states";
+import { useGraph, useGraphState } from "@/lib/use-scan";
 import { useSnapshot } from "@/views/snapshot";
 import { fmtCost, fmtTokens } from "@/lib/format";
 import { useState } from "react";
@@ -18,6 +18,7 @@ import { useState } from "react";
 export function DailyView() {
   const snap = useSnapshot();
   const graph = useGraph(snap.ready);
+  const graphState = useGraphState(graph);
 
   // Upstream's Daily Detail, which is a day broken down by client/provider/model.
   // Served by `model_report` with `since == until == the date` off the held
@@ -41,67 +42,69 @@ export function DailyView() {
     <>
       <ViewHeader title="Daily" filter={snap.rangeLabel} />
 
-      <Tiles
-        items={[
-          ["Active days", graph.data ? `${days.length}/${graph.data.length}` : "—"],
-          ["Busiest day", busiest?.date ?? "—"],
-          ["Busiest day cost", busiest ? fmtCost(busiest.cost) : "—"],
-          ["Total cost", days.length ? fmtCost(total) : "—"],
-        ]}
-      />
+      <Replacing on={graphState === "replacing"}>
+        <Tiles
+          items={[
+            ["Active days", graph.data ? `${days.length}/${graph.data.length}` : "—"],
+            ["Busiest day", busiest?.date ?? "—"],
+            ["Busiest day cost", busiest ? fmtCost(busiest.cost) : "—"],
+            ["Total cost", days.length ? fmtCost(total) : "—"],
+          ]}
+        />
 
-      <Table className="mt-5 text-small">
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="h-[26px] text-micro font-normal">Date</TableHead>
-            <TableHead className="h-[26px] text-right text-micro font-normal">Tokens</TableHead>
-            <TableHead className="h-[26px] text-right text-micro font-normal">Cost</TableHead>
-            <TableHead className="h-[26px] pl-6 text-micro font-normal">Share</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {graph.isPending ? (
-            <RowSkeleton cols={4} />
-          ) : (
-            days.map((d) => (
-              <TableRow
-                key={d.date}
-                onClick={() => setDay(d.date)}
-                className="h-row cursor-pointer border-border/50"
-              >
-                <TableCell className="py-0 font-mono">{d.date}</TableCell>
-                <TableCell className="tnum py-0 text-right font-mono text-muted-foreground">
-                  {fmtTokens(d.tokens)}
-                </TableCell>
-                <TableCell className="tnum py-0 text-right font-mono">{fmtCost(d.cost)}</TableCell>
-                <TableCell className="py-0 pl-6">
-                  {/* The bar takes the day's Ramp step, so a row here and its
-                      cell in the Contribution Graph read as the same day. */}
-                  <span
-                    className="block h-[6px] rounded-[1px]"
-                    style={{
-                      width: busiest?.cost ? `${(d.cost / busiest.cost) * 100}%` : 0,
-                      background: `var(--ramp-${d.level})`,
-                    }}
-                  />
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-        {days.length > 0 && (
-          <TableFooter className="bg-transparent">
-            <TableRow className="h-row border-border">
-              <TableCell className="py-0 font-medium">Total</TableCell>
-              <TableCell className="py-0" />
-              <TableCell className="tnum py-0 text-right font-mono font-semibold">
-                {fmtCost(total)}
-              </TableCell>
-              <TableCell className="py-0" />
+        <Table className="mt-5 text-small">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="h-[26px] text-micro font-normal">Date</TableHead>
+              <TableHead className="h-[26px] text-right text-micro font-normal">Tokens</TableHead>
+              <TableHead className="h-[26px] text-right text-micro font-normal">Cost</TableHead>
+              <TableHead className="h-[26px] pl-6 text-micro font-normal">Share</TableHead>
             </TableRow>
-          </TableFooter>
-        )}
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {graphState === "waiting" ? (
+              <RowSkeleton cols={4} />
+            ) : (
+              days.map((d) => (
+                <TableRow
+                  key={d.date}
+                  onClick={() => setDay(d.date)}
+                  className="h-row cursor-pointer border-border/50"
+                >
+                  <TableCell className="py-0 font-mono">{d.date}</TableCell>
+                  <TableCell className="tnum py-0 text-right font-mono text-muted-foreground">
+                    {fmtTokens(d.tokens)}
+                  </TableCell>
+                  <TableCell className="tnum py-0 text-right font-mono">{fmtCost(d.cost)}</TableCell>
+                  <TableCell className="py-0 pl-6">
+                    {/* The bar takes the day's Ramp step, so a row here and its
+                        cell in the Contribution Graph read as the same day. */}
+                    <span
+                      className="block h-[6px] rounded-[1px]"
+                      style={{
+                        width: busiest?.cost ? `${(d.cost / busiest.cost) * 100}%` : 0,
+                        background: `var(--ramp-${d.level})`,
+                      }}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+          {days.length > 0 && (
+            <TableFooter className="bg-transparent">
+              <TableRow className="h-row border-border">
+                <TableCell className="py-0 font-medium">Total</TableCell>
+                <TableCell className="py-0" />
+                <TableCell className="tnum py-0 text-right font-mono font-semibold">
+                  {fmtCost(total)}
+                </TableCell>
+                <TableCell className="py-0" />
+              </TableRow>
+            </TableFooter>
+          )}
+        </Table>
+      </Replacing>
 
       {day && (
         <DetailDialog
