@@ -9,6 +9,7 @@ import { ModelsView } from "@/views/models";
 import { DailyView } from "@/views/daily";
 import { StatsView } from "@/views/stats";
 import { PricingView } from "@/views/pricing";
+import { FilterBar } from "@/components/filter-bar";
 
 /** Sidebar destinations. P1 ships Overview, Models, Daily and Stats; the rest
  *  arrive in P2. Order mirrors upstream tokscale's tab order. */
@@ -51,7 +52,13 @@ function Shell() {
       </aside>
 
       <main className="flex-1 overflow-auto">
-        <div className="h-11 w-full" data-tauri-drag-region />
+        {/* The Report Filter sits in the chrome, above every View. The drag
+            region is its own element rather than the row: a titlebar drag
+            swallows clicks on the controls otherwise. */}
+        <div className="flex h-11 w-full items-center gap-2 px-gutter">
+          <div className="h-full flex-1" data-tauri-drag-region />
+          <FilterBar />
+        </div>
         <div className="px-gutter pb-8">
           <Outlet />
         </div>

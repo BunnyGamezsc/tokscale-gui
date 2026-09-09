@@ -11,10 +11,11 @@ import {
 } from "@/components/ui/table";
 import { ViewHeader, Tiles } from "@/components/view";
 import { drillMatch, DetailDialog, useRowDetail } from "@/components/detail";
-import { RowSkeleton, NoUsage } from "@/components/states";
+import { RowSkeleton, NoUsage, NoMatch } from "@/components/states";
 import { GROUP_BY, type Entry, type GroupBy } from "@/lib/api";
 import { useReport } from "@/lib/use-scan";
 import { useSnapshot } from "@/views/snapshot";
+import { useFilter, clearFilter, isNarrowed } from "@/lib/filter";
 import { fmtCost, fmtInt, fmtTokens } from "@/lib/format";
 
 /** Columns are declared rather than written per-cell, so sorting reads a value
@@ -39,6 +40,7 @@ const COLS: Col[] = [
 
 export function ModelsView() {
   const snap = useSnapshot();
+  const filter = useFilter();
   const [groupBy, setGroupBy] = useState<GroupBy>("model");
   const [sort, setSort] = useState<{ key: keyof Entry; desc: boolean }>({
     key: "cost",
@@ -73,7 +75,8 @@ export function ModelsView() {
   }, [report.data, sort]);
 
   if (snap.gate) return snap.gate;
-  if (report.data && report.data.entries.length === 0) return <NoUsage />;
+  if (report.data && report.data.entries.length === 0)
+    return isNarrowed(filter) ? <NoMatch onClear={clearFilter} /> : <NoUsage />;
 
   return (
     <>

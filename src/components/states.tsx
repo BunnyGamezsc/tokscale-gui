@@ -75,6 +75,19 @@ export function NoUsage() {
   );
 }
 
+/** A Report Filter that matches nothing. Distinct from `NoUsage`: the corpus
+ *  has usage, the question just excluded all of it, so the way out is the
+ *  Filter and not `settings.json`. */
+export function NoMatch({ onClear }: { onClear: () => void }) {
+  return (
+    <Placeholder
+      title="Nothing in this range"
+      body="The corpus has usage, but none of it matches the active filter."
+      action={<Button variant="outline" size="sm" onClick={onClear}>Clear filter</Button>}
+    />
+  );
+}
+
 export function Placeholder({
   title,
   body,

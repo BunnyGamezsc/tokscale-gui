@@ -52,9 +52,17 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
   "~1.3 s warm / ~15 s cold" was a graph call with *no* Scan in front of it, and the UI
   cannot make that call: `useGraph` is gated on the Scan landing. Neither of those two
   figures reproduced; see #27 for the full table and the build each number came from.
-- The Report Filter's `clients` is **scan-time only**. Core's report-time predicate consults
-  `year`/`since`/`until` and never `clients` — pinned by
-  `a_client_narrowing_is_inert_against_the_held_snapshot`.
+- The Report Filter's `clients` is honoured by **two different mechanisms**, one per path.
+  Core's report-time predicate consults `year`/`since`/`until` and never `clients` — pinned
+  by `a_client_narrowing_is_inert_against_the_held_snapshot` — so Overview and Models, which
+  are served from the held Snapshot, are narrowed in the command layer by `narrow_clients`
+  before aggregation (#26). Daily and Stats go through `graph_report`, which re-enters the
+  parse, and there `clients` is a parse input core already honours; a graph day is folded by
+  a private `GraphSink` with no per-Client decomposition to subtract afterwards. The two
+  paths agree exactly under both narrowings — `daily_detail_agrees_with_the_daily_row` runs
+  a whole-corpus, a narrowed-range and a narrowed-Client arm, worst delta 0.0 on 71/36/47
+  active days. A narrowed graph call walks a subset of the warmed cache and is *cheaper*
+  than an unnarrowed one: 28 ms against 331 ms warm in release.
 - Manual pricing overrides are written to `~/.config/tokscale/custom-pricing.json`, the same
   file the CLI and TUI read. Saves merge rather than replace, so hand-written tiers survive.
 
@@ -84,7 +92,8 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 ## Built
 
 Overview, Models, Daily, Stats and Pricing views. Scan/report command surface. Design system
-and theming. Contribution graph. Manual pricing overrides.
+and theming. Contribution graph. Manual pricing overrides. The Report Filter in the window
+chrome, shared across Views.
 
 ## Open
 

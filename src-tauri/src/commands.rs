@@ -55,6 +55,29 @@ impl Filter {
         }
     }
 
+    /// Client narrowing, applied to the held Snapshot *before* aggregation.
+    ///
+    /// One `Filter` field, two mechanisms. On the graph path `clients` is a
+    /// parse input and core honours it (`generate_graph_with_loaded_pricing`
+    /// picks which clients to walk). On the Snapshot path it is inert: core's
+    /// report-time predicate consults `year`/`since`/`until` and never
+    /// `clients`, pinned by `a_client_narrowing_is_inert_against_the_held_
+    /// snapshot`. So the Snapshot path has to do it here, and an Entry pooled
+    /// across Clients carries no breakdown to subtract afterwards
+    /// (`narrowing_by_client_cannot_be_done_after_aggregation`).
+    ///
+    /// An empty selection narrows to nothing rather than to everything — that
+    /// is what core's parse path does with `Some(vec![])` too.
+    fn narrow_clients(&self, messages: Vec<UnifiedMessage>) -> Vec<UnifiedMessage> {
+        match &self.clients {
+            Some(want) => messages
+                .into_iter()
+                .filter(|m| want.contains(&m.client))
+                .collect(),
+            None => messages,
+        }
+    }
+
     fn parse_options(&self) -> LocalParseOptions {
         LocalParseOptions {
             home_dir: None,
@@ -164,7 +187,7 @@ pub async fn model_report(
     };
 
     let options = filter.report_options(group_by.clone());
-    let filtered = filter_messages_for_report(messages, &options);
+    let filtered = filter_messages_for_report(filter.narrow_clients(messages), &options);
     let total_messages = filtered.iter().map(|m| m.message_count).sum();
     let entries =
         aggregate_model_usage_entries_with_rollup(filtered, &group_by, WorktreeRollup::default());
@@ -283,8 +306,16 @@ pub async fn graph_report(filter: Option<Filter>) -> Result<Vec<Day>, String> {
 ///
 /// Ticket 09: this reads the aggregate, never `ScanResult::files` — "found, but
 /// parsed nothing" is reconstructed view-side, not guessed at here.
+///
+/// Takes a Report Filter so Stats' per-Client figures follow the active one.
+/// The Filter control itself asks with none, so its options stay the whole
+/// corpus rather than collapsing to whatever is already selected.
 #[tauri::command]
-pub async fn clients(state: tauri::State<'_, Snapshot>) -> Result<Vec<Client>, String> {
+pub async fn clients(
+    state: tauri::State<'_, Snapshot>,
+    filter: Option<Filter>,
+) -> Result<Vec<Client>, String> {
+    let filter = filter.unwrap_or_default();
     let messages = {
         let guard = state.0.lock().map_err(|_| "snapshot lock poisoned")?;
         guard
@@ -292,6 +323,10 @@ pub async fn clients(state: tauri::State<'_, Snapshot>) -> Result<Vec<Client>, S
             .ok_or("no snapshot: run a scan first")?
             .clone()
     };
+    let messages = filter_messages_for_report(
+        filter.narrow_clients(messages),
+        &filter.report_options(GroupBy::Model),
+    );
 
     let mut by_client: std::collections::BTreeMap<String, Client> = Default::default();
     for m in &messages {
@@ -448,6 +483,56 @@ mod tests {
         );
     }
 
+    /// What ticket 26 builds on top of that finding: **the command layer does
+    /// the narrowing core's predicate will not.** Same Filter, same corpus, but
+    /// run through `narrow_clients` before aggregation — codex's $2.00 is gone,
+    /// which is the whole point of a Client selection in the Report Filter.
+    #[test]
+    fn a_client_narrowing_excludes_that_clients_cost_before_aggregation() {
+        let f = Filter {
+            clients: Some(vec!["claude-code".into()]),
+            ..Default::default()
+        };
+        let options = f.report_options(GroupBy::Model);
+        let kept = filter_messages_for_report(f.narrow_clients(corpus()), &options);
+        assert_eq!(kept.len(), 2, "only claude-code's messages survive");
+
+        let entries = aggregate_model_usage_entries_with_rollup(
+            kept,
+            &options.group_by,
+            WorktreeRollup::default(),
+        );
+        let cost: f64 = entries.iter().map(|e| e.cost).sum();
+        assert!(
+            (cost - 5.0).abs() < 1e-9,
+            "narrowed report costs {cost}, want 5.0 (7.0 less codex's 2.0)"
+        );
+    }
+
+    /// A narrowing that matches nothing is an empty report, not an error. An
+    /// empty selection is a real one — "no Clients" rather than "no constraint"
+    /// — which is also how core's parse path reads `Some(vec![])`.
+    #[test]
+    fn a_narrowing_that_matches_nothing_is_empty_rather_than_everything() {
+        for clients in [vec![], vec!["kiro".to_string()]] {
+            let f = Filter {
+                clients: Some(clients.clone()),
+                ..Default::default()
+            };
+            assert!(
+                f.narrow_clients(corpus()).is_empty(),
+                "{clients:?} must narrow to nothing"
+            );
+        }
+
+        let f = Filter {
+            since: Some("2027-01-01".into()),
+            ..Default::default()
+        };
+        let kept = filter_messages_for_report(corpus(), &f.report_options(GroupBy::Model));
+        assert!(kept.is_empty(), "a range past the corpus keeps nothing");
+    }
+
     /// Why a Report Filter cannot be a table filter (CONTEXT.md: **Report
     /// Filter**). Under `model`, one Entry pools every Client that ran that
     /// model, and the pooled row carries no client breakdown. Dropping rows
@@ -594,10 +679,10 @@ mod tests {
             summary.last_day.as_deref().unwrap_or("-"),
         );
 
-        let graph = |label: &str| {
+        let graph = |label: &str, filter: Filter| {
             let started = Instant::now();
             let out = tauri::async_runtime::block_on(generate_local_graph_report(
-                Filter::default().report_options(GroupBy::Model),
+                filter.report_options(GroupBy::Model),
             ));
             let ms = started.elapsed().as_millis();
             match out {
@@ -607,11 +692,23 @@ mod tests {
         };
         // The one the ticket asks about: what a user pays on their first visit
         // to Daily.
-        graph("first graph call after the scan");
+        graph("first graph call after the scan", Filter::default());
         // What `graph_report_cost` calls warm, measured here for comparison: if
         // the two agree, the Scan did the warming and a second call buys
         // nothing more.
-        graph("second graph call");
+        graph("second graph call", Filter::default());
+        // Ticket 26: every change to the Report Filter is another graph call,
+        // and a Client narrowing is a *new parse* rather than a slice of the
+        // last one. It walks a subset of the same warmed cache, so it should
+        // come in at or under the unnarrowed figures. Seconds here would
+        // contradict #27 and belongs on #27 as a finding.
+        graph(
+            "narrowed graph call (one client)",
+            Filter {
+                clients: Some(vec!["codex".to_string()]),
+                ..Default::default()
+            },
+        );
     }
 
     /// Ticket 10's first contract: **a drill-down sums to the row it opened
@@ -679,6 +776,13 @@ mod tests {
     /// second `graph_report`, no rescan, and no fork change. That only works if
     /// the two paths bucket a day identically.
     ///
+    /// Ticket 26 extends it to the narrowed case, because the Report Filter now
+    /// drives both paths and they honour it by *different mechanisms*: a range
+    /// is a report-time predicate on one side and a parse input on the other,
+    /// and a Client selection is a parse input on the graph side but this
+    /// module's `narrow_clients` on the Snapshot side. Agreeing on the whole
+    /// corpus does not imply agreeing under a narrowing, so all three arms run.
+    ///
     /// Not a unit test — it walks real disk. Run by hand:
     /// `cargo test --lib -- --ignored --nocapture daily_detail_agrees`
     #[test]
@@ -687,7 +791,8 @@ mod tests {
         // The Snapshot must be built with pricing, exactly as `scan` builds it.
         // Without it every message costs 0.0 while `graph_report` fetches its
         // own rates, and the two paths disagree for a reason that has nothing
-        // to do with how a day is bucketed.
+        // to do with how a day is bucketed. It is built unnarrowed, because
+        // `scan` never takes the Report Filter — narrowing is report-time.
         let snapshot = tauri::async_runtime::block_on(async {
             let pricing = PricingService::get_or_init().await.ok();
             parse_local_unified_messages_with_pricing(
@@ -699,52 +804,89 @@ mod tests {
         .expect("scan");
         println!("snapshot: {} messages", snapshot.len());
 
-        let graph = tauri::async_runtime::block_on(generate_local_graph_report(
-            Filter::default().report_options(GroupBy::Model),
-        ))
-        .expect("graph_report");
+        // One arm: every active day of `base`'s graph, checked against the
+        // one-day report the dialog actually asks for, under the same base
+        // narrowing. Returns the active days so a later arm can narrow to them.
+        let check = |label: &str, base: Filter| -> Vec<String> {
+            let graph = tauri::async_runtime::block_on(generate_local_graph_report(
+                base.report_options(GroupBy::Model),
+            ))
+            .expect("graph_report");
 
-        let mut checked = 0;
-        let mut worst = 0.0f64;
-        for day in graph.contributions.iter().filter(|c| c.totals.cost > 0.0) {
-            let f = Filter {
-                since: Some(day.date.clone()),
-                until: Some(day.date.clone()),
-                ..Default::default()
-            };
-            let options = f.report_options(
-                "client,provider,model"
-                    .parse::<GroupBy>()
-                    .expect("group-by"),
-            );
-            let kept = filter_messages_for_report(snapshot.clone(), &options);
-            let entries = aggregate_model_usage_entries_with_rollup(
-                kept,
-                &options.group_by,
-                WorktreeRollup::default(),
-            );
-            let cost: f64 = entries.iter().map(|e| e.cost).sum();
-            let delta = (cost - day.totals.cost).abs();
-            if delta > worst {
-                worst = delta;
-                println!(
-                    "{}: dialog {cost:.6} vs row {:.6} ({} entries)",
-                    day.date,
-                    day.totals.cost,
-                    entries.len()
+            let mut active = Vec::new();
+            let mut worst = 0.0f64;
+            for day in graph.contributions.iter().filter(|c| c.totals.cost > 0.0) {
+                let f = Filter {
+                    since: Some(day.date.clone()),
+                    until: Some(day.date.clone()),
+                    clients: base.clients.clone(),
+                    ..Default::default()
+                };
+                let options = f.report_options(
+                    "client,provider,model"
+                        .parse::<GroupBy>()
+                        .expect("group-by"),
                 );
+                let kept = filter_messages_for_report(f.narrow_clients(snapshot.clone()), &options);
+                let entries = aggregate_model_usage_entries_with_rollup(
+                    kept,
+                    &options.group_by,
+                    WorktreeRollup::default(),
+                );
+                let cost: f64 = entries.iter().map(|e| e.cost).sum();
+                worst = worst.max((cost - day.totals.cost).abs());
+                assert!(
+                    !entries.is_empty(),
+                    "{label}, {}: the row has cost but the one-day filter found nothing",
+                    day.date
+                );
+                active.push(day.date.clone());
             }
-            assert!(
-                !entries.is_empty(),
-                "{} has cost but the one-day filter found nothing",
-                day.date
-            );
-            checked += 1;
-        }
 
-        println!("checked {checked} active days, worst delta {worst:.9}");
-        assert!(checked > 0, "no active days to check");
-        assert!(worst < 1e-6, "dialog and row disagree by {worst}");
+            println!(
+                "{label}: checked {} active days, worst delta {worst:.9}",
+                active.len()
+            );
+            assert!(!active.is_empty(), "{label}: no active days to check");
+            assert!(worst < 1e-6, "{label}: dialog and row disagree by {worst}");
+            active
+        };
+
+        let active = check("whole corpus", Filter::default());
+
+        // A narrowed range, taken from the corpus so it is guaranteed to hold
+        // days: the graph re-parses under it while the dialog stays a
+        // report-time predicate over the full Snapshot.
+        let mid = active[active.len() / 2].clone();
+        println!("narrowing to {mid}..");
+        check(
+            "narrowed range",
+            Filter {
+                since: Some(mid),
+                ..Default::default()
+            },
+        );
+
+        // A narrowed Client: the graph honours it by walking fewer clients,
+        // the dialog by `narrow_clients` over the Snapshot. Two mechanisms,
+        // one answer, or this fails.
+        let mut counts: std::collections::BTreeMap<&str, usize> = Default::default();
+        for m in &snapshot {
+            *counts.entry(m.client.as_str()).or_default() += 1;
+        }
+        let busiest = counts
+            .into_iter()
+            .max_by_key(|(_, n)| *n)
+            .map(|(c, _)| c.to_string())
+            .expect("the corpus has a client");
+        println!("narrowing to client {busiest}");
+        check(
+            "narrowed client",
+            Filter {
+                clients: Some(vec![busiest]),
+                ..Default::default()
+            },
+        );
     }
 
     // ---- Ticket 25: Ramp bucketing ----

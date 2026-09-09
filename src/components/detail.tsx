@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { RowSkeleton } from "@/components/states";
 import * as api from "@/lib/api";
+import { asArg, useFilter } from "@/lib/filter";
 import type { Entry, GroupBy } from "@/lib/api";
 import { fmtCost, fmtInt, fmtTokens } from "@/lib/format";
 
@@ -52,18 +53,22 @@ export function drillMatch(groupBy: GroupBy, row: Entry | null) {
 const FINER: GroupBy = "client,provider,model";
 
 export function useDayDetail(date: string | null) {
+  // The active Report Filter still applies — the dialog has to equal the Daily
+  // row it opened from, and that row is narrowed. Only the range is replaced.
+  const filter = useFilter();
   return useQuery({
-    queryKey: ["model_report", FINER, date],
-    queryFn: () => api.modelReport(FINER, { since: date!, until: date! }),
+    queryKey: ["model_report", FINER, filter, date],
+    queryFn: () => api.modelReport(FINER, { ...filter, since: date!, until: date! }),
     enabled: date !== null,
     staleTime: Infinity,
   });
 }
 
 export function useRowDetail(row: Entry | null, groupBy: GroupBy, ready: boolean) {
+  const filter = useFilter();
   const q = useQuery({
-    queryKey: ["model_report", FINER],
-    queryFn: () => api.modelReport(FINER),
+    queryKey: ["model_report", FINER, filter],
+    queryFn: () => api.modelReport(FINER, asArg(filter)),
     enabled: ready && row !== null,
     staleTime: Infinity,
   });

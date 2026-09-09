@@ -90,7 +90,10 @@ export const modelReport = (groupBy: GroupBy, filter?: Filter) =>
  *  the surface. ~0.9s, invalidated only by a scan. */
 export const graphReport = (filter?: Filter) => invoke<Day[]>("graph_report", { filter });
 
-export const clients = () => invoke<Client[]>("clients");
+/** The Clients that produced usage. Takes a Report Filter so Stats' per-Client
+ *  figures follow the active one; the Filter control itself asks with none, so
+ *  its options stay the whole corpus. */
+export const clients = (filter?: Filter) => invoke<Client[]>("clients", { filter });
 
 /** A model that spent tokens but produced no cost. */
 export interface Unpriced {
