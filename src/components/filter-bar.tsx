@@ -13,6 +13,12 @@ import { useFilter, setFilter, clearFilter, isNarrowed } from "@/lib/filter";
  *  aggregated — which is why this is chrome and not a column filter over a
  *  table (CONTEXT.md: **Report Filter**).
  *
+ *  Its Client control is *report-time*, and the window has no other kind: the
+ *  GUI's **Enabled Clients** are a constant, so nothing here can cost a Scan
+ *  (#30, ADR 0005). That is a distinction a checkbox list cannot make on its
+ *  own — upstream's identical-looking `s` picker rescans — so the picker says
+ *  it in words rather than relying on where it sits.
+ *
  *  Hidden until a Scan has landed: with no Snapshot there is nothing to narrow,
  *  and the Client options are read off the corpus.
  */
@@ -31,7 +37,7 @@ export function FilterBar() {
     });
 
   return (
-    <div className="flex items-center gap-1.5 text-small">
+    <div role="group" aria-label="Report Filter" className="flex items-center gap-1.5 text-small">
       {/* Native date inputs: the range is two inclusive `YYYY-MM-DD` strings
           compared as strings against an already-bucketed day, so there is no
           timezone arithmetic here to justify a picker component
@@ -54,7 +60,17 @@ export function FilterBar() {
         className={FIELD}
       />
 
-      <Picker label={picked.length ? `${picked.length} clients` : "All clients"}>
+      <Picker
+        label={picked.length ? `${picked.length} clients` : "All clients"}
+        ariaLabel="Clients to report on"
+      >
+        {/* The whole point of #30. Two Client controls that look like this cost
+            21-40 s and 41-100 ms respectively; only one of them exists here,
+            and saying which is cheaper than making the user find out. */}
+        <p className="px-1.5 py-1 text-micro leading-relaxed text-muted-foreground">
+          Narrows the report. Every client is scanned either way, so this costs
+          milliseconds — never a rescan.
+        </p>
         {(clients.data ?? []).map((c) => (
           <label
             key={c.id}
@@ -92,7 +108,15 @@ const FIELD =
 /** A `<details>` disclosure, which is the platform's dropdown: it gives the
  *  open/closed state and keyboard toggling for free, and no popover component
  *  is installed. All it lacks is closing on an outside click. */
-function Picker({ label, children }: { label: string; children: React.ReactNode }) {
+function Picker({
+  label,
+  ariaLabel,
+  children,
+}: {
+  label: string;
+  ariaLabel: string;
+  children: React.ReactNode;
+}) {
   const ref = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
@@ -105,7 +129,12 @@ function Picker({ label, children }: { label: string; children: React.ReactNode 
 
   return (
     <details ref={ref} className="relative">
-      <summary className={`${FIELD} flex cursor-pointer list-none items-center`}>{label}</summary>
+      <summary
+        aria-label={ariaLabel}
+        className={`${FIELD} flex cursor-pointer list-none items-center`}
+      >
+        {label}
+      </summary>
       <div className="absolute right-0 z-10 mt-1 max-h-[50vh] w-[190px] overflow-y-auto rounded-md border border-border bg-background p-1 shadow-lg">
         {children}
       </div>

@@ -54,7 +54,9 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
   "~1.3 s warm / ~15 s cold" was a graph call with *no* Scan in front of it, and the UI
   cannot make that call: `useGraph` is gated on the Scan landing. Neither of those two
   figures reproduced; see #27 for the full table and the build each number came from.
-- The Report Filter's `clients` is honoured by **two different mechanisms**, one per path.
+- The Report Filter's Client narrowing is *report-time*, and the GUI has no other kind:
+  **Enabled Clients** are a constant, every `parse_local` Client, always (#30, ADR 0005).
+  The Report Filter's `clients` is honoured by **two different mechanisms**, one per path.
   Core's report-time predicate consults `year`/`since`/`until` and never `clients` — pinned
   by `a_client_narrowing_is_inert_against_the_held_snapshot` — so Overview and Models, which
   are served from the held Snapshot, are narrowed in the command layer by `narrow_clients`
@@ -98,7 +100,7 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 Overview, Models, Daily, Stats and Pricing views. Scan/report command surface. Design system
 and theming. Contribution graph. Manual pricing overrides. The Report Filter in the window
 chrome, shared across Views. The keyboard surface and its Shortcuts sheet. The cold
-first-run experience.
+first-run experience. The `scanner` half of `settings.json`, read-only.
 
 ## Open
 
@@ -181,11 +183,27 @@ Roughly in the order they bite.
    - **Refresh has one owner.** `force` and `abandoned` are module state in `use-scan.ts`
      now, behind `refreshScan`, for the reason `useScanLanded` already existed.
 
-5. **Scan-time vs report-time Client selection.** Two different operations share one word.
-   Turning a Client off *for scanning* changes what the corpus is and costs a full rescan;
-   narrowing a report changes what an Entry means and costs 41–100 ms. Decide whether the GUI
-   exposes the first at all (upstream's `s` picker writes `enabled_clients` and rescans), where
-   it lives if so, and what the two things are **called** — `CONTEXT.md` needs the term.
+5. ~~**Scan-time vs report-time Client selection.**~~ Settled by #30 and written up in
+   ADR 0005. The word is **Enabled Clients** and it is now in `CONTEXT.md`, alongside
+   **Default Clients** for upstream's third, differently-shaped thing.
+
+   - **The GUI does not expose scan-time selection.** Enabled Clients is a constant —
+     every `parse_local` Client, always — so the Snapshot is the whole machine and every
+     Client control in the window is a Report Filter control. The lever's cost model is
+     inverted (it charges a rescan to make a later rescan shorter), and a persisted
+     narrowing would silently under-report on every launch.
+   - **Upstream has three things, not two, and the line here was half right.** `s` opens
+     `ClientPickerDialog`, which mutates an in-memory `enabled_clients` and rescans; it
+     does *not* write `settings.json`. The persisted `defaultClients` is a default for the
+     CLI's `--client` flags, not the picker's store.
+   - **`settings.json` is now read, and that is what makes "the whole machine" true.**
+     Both commands passed `scanner_settings: Default::default()`, so `extraScanPaths`,
+     `opencodeDbPaths` and a pinned `bucketTimezone` never reached core — `NoUsage` named
+     a file the app ignored. `src-tauri/src/settings.rs` reads the `scanner` key and
+     nothing writes it: the CLI stays the file's single writer.
+   - **Refresh is the only action that costs a Scan, and it says so.** Overview's button
+     and the Shortcuts sheet's `R` row both carry the cost, in words rather than a confirm
+     dialog — ADR 0004's posture, since a rescan is slow rather than destructive.
 
 6. **Vendor CLI resolution.** A `.app` launched from Finder inherits launchd's minimal
    environment, not the user's shell PATH. tokscale shells out to `codex`, `grok`, `gh`,

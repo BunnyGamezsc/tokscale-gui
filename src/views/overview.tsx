@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -9,7 +8,7 @@ import {
 } from "@/components/ui/table";
 import { ContributionGraph, RampLegend, GRAPH_HEIGHT } from "@/components/contribution-graph";
 import { ViewHeader, Tiles, SectionHead } from "@/components/view";
-import { RowSkeleton } from "@/components/states";
+import { RowSkeleton, RescanButton } from "@/components/states";
 import { useReport, useGraph } from "@/lib/use-scan";
 import { useSnapshot } from "@/views/snapshot";
 import { useDayDialog } from "@/components/detail";
@@ -30,9 +29,7 @@ export function OverviewView() {
   return (
     <>
       <ViewHeader title="Overview" filter={snap.rangeLabel}>
-        <Button variant="outline" size="sm" onClick={snap.refresh}>
-          Refresh
-        </Button>
+        <RescanButton onRefresh={snap.refresh} etaSeconds={snap.etaSeconds} />
       </ViewHeader>
 
       <Tiles

@@ -29,6 +29,15 @@ pub struct Snapshot(pub Mutex<Option<Vec<UnifiedMessage>>>);
 /// The Report Filter: client, date-range and year constraints applied *before*
 /// aggregation. Narrowing it changes what each Entry means, not which Entries
 /// are displayed (CONTEXT.md: **Report Filter**).
+///
+/// Not to be confused with **Enabled Clients**, the set of Clients a Scan
+/// parses (CONTEXT.md). The wire format collapses the two — `clients` below is
+/// one field, and `scan` takes a whole `Filter` — so on the `scan` command this
+/// same field *would* be a scan-time selection rather than a report-time one.
+/// Ticket 30 decided the GUI's Enabled Clients are a constant, so the frontend
+/// never sends `scan` a Filter at all (`api.scan(undefined, forced)`) and the
+/// two meanings never both go down the wire. ADR 0005 records why, and why the
+/// field was not split to say so in the type.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Filter {
@@ -51,7 +60,7 @@ impl Filter {
             year: self.year.clone(),
             group_by,
             worktree_rollup: WorktreeRollup::default(),
-            scanner_settings: Default::default(),
+            scanner_settings: crate::settings::scanner(),
         }
     }
 
@@ -86,7 +95,7 @@ impl Filter {
             since: self.since.clone(),
             until: self.until.clone(),
             year: self.year.clone(),
-            scanner_settings: Default::default(),
+            scanner_settings: crate::settings::scanner(),
         }
     }
 }

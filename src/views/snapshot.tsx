@@ -11,6 +11,10 @@ export function useSnapshot(): {
   rangeLabel: string | undefined;
   gate: ReactNode | null;
   refresh: () => void;
+  /** The previous run's duration, for the warning a Refresh owes before it is
+   *  taken (#30). Read here rather than in the button, because `useScan` has
+   *  one owner and a second call would bring a second elapsed timer. */
+  etaSeconds: number | null;
 } {
   const scan = useScan();
   const state = useScanState(scan);
@@ -60,5 +64,6 @@ export function useSnapshot(): {
     rangeLabel,
     gate,
     refresh,
+    etaSeconds: scan.etaSeconds,
   };
 }

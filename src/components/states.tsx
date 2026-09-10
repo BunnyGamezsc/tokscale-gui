@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { rescanNotice } from "@/lib/scan-state";
 
 /** What a **Refresh** looks like while it runs: a banner, because a Snapshot is
  *  already held and the numbers on screen are still the last answer. A first run
@@ -115,6 +116,38 @@ export function Spinner({ size = 12 }: { size?: number }) {
   );
 }
 
+/** Refresh, with its price on the label rather than behind it.
+ *
+ *  Ticket 30's last acceptance box: an action that costs a rescan says so
+ *  before it is taken. It is a sentence and not a confirm dialog for the reason
+ *  ADR 0004 gives about the first-run wait — this window explains costs rather
+ *  than gating them, and a dialog in front of the only Refresh in the app would
+ *  be a click added to every legitimate use to catch a mistake that undoes
+ *  nothing. A rescan is not destructive; it is *slow*, and slow is a thing you
+ *  tell someone, not a thing you make them confirm.
+ *
+ *  `aria-describedby` rather than a bare paragraph, so the cost is announced
+ *  with the button rather than read as unrelated text after it.
+ */
+export function RescanButton({
+  onRefresh,
+  etaSeconds,
+}: {
+  onRefresh: () => void;
+  etaSeconds: number | null;
+}) {
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button variant="outline" size="sm" onClick={onRefresh} aria-describedby="rescan-cost">
+        Refresh
+      </Button>
+      <span id="rescan-cost" className="text-micro text-muted-foreground">
+        {rescanNotice(etaSeconds)}
+      </span>
+    </div>
+  );
+}
+
 /** A Scan is still running but the user stopped waiting for it. */
 export function Abandoned({ onRefresh }: { onRefresh: () => void }) {
   return (
@@ -137,12 +170,17 @@ export function Failed({ message, onRetry }: { message: string; onRetry: () => v
 }
 
 /** Nothing was found. ~50 clients are scanned and most are absent on any given
- *  machine, so this is a normal outcome rather than an error. */
+ *  machine, so this is a normal outcome rather than an error.
+ *
+ *  The advice names a real lever now. Until #30 both commands passed
+ *  `scanner_settings: Default::default()`, so this told the user to edit a file
+ *  the app did not read — and it is the *only* lever, since the GUI's Enabled
+ *  Clients are a constant and there is no client to switch back on. */
 export function NoUsage() {
   return (
     <Placeholder
       title="No usage found"
-      body="No transcripts were found for any supported client. If your tools store data somewhere non-standard, add those paths to ~/.config/tokscale/settings.json."
+      body="No transcripts were found for any supported client. If your tools store data somewhere non-standard, add those paths under `scanner.extraScanPaths` in ~/.config/tokscale/settings.json and refresh — the app reads that file, the same one the CLI does."
     />
   );
 }

@@ -62,11 +62,34 @@ how rows are sorted.
 active Group-By and the active Report Filter.
 
 **Bucket Timezone** — the named IANA zone that decides which calendar day a message
-falls in. Pinned on first scan, because a fixed UTC offset cannot follow DST and would
-re-split usage near the day boundary twice a year.
+falls in, because a fixed UTC offset cannot follow DST and would re-split usage near the
+day boundary twice a year. Pinned once, in `settings.json`, and pinning is a *write*: the
+CLI does it on its first run (`pin_bucket_timezone_if_unset`). The GUI reads that pin and
+honours it but never writes one, because `settings.json` keeps a single writer (ADR 0005).
+On a machine where only the GUI has ever run, the zone is unpinned and day keys follow the
+system zone, exactly as they did before pinning existed.
 
-**Scan** — walking every enabled client's data locations and parsing transcripts into
+**Scan** — walking every **Enabled Client**'s Sources and parsing transcripts into
 Unified Messages. **Source** — one such data location.
+
+**Enabled Clients** — the set of Clients a Scan actually parses. Upstream's word: the
+TUI holds an `enabled_clients` set and its `s` picker edits it, which sets `needs_reload`
+and rescans. Changing it changes what the Snapshot *is* and costs a full Scan (~22 s
+cold). This is the term the Report Filter's Client constraint is **not**: that one
+changes what an Entry *means* and costs a re-aggregation (41–100 ms). Two operations,
+two orders of magnitude, and upstream gives both the one word "clients" — `LocalParseOptions.clients`
+is fed by the TUI picker *and* by `--client` flags, which is where the confusion starts.
+
+In the GUI, Enabled Clients is a **constant**: every `parse_local` Client, always, which
+is the set `client_catalog` names. There is no control for it, so every Client control in
+the window is a Report Filter control (#30, ADR 0005).
+
+**Default Clients** — upstream's persisted `defaultClients` in `settings.json`. Despite
+the name it is neither of the above two: `build_client_filter` uses it as the default for
+the CLI's `--client` flags when none are passed, so it is a *report-time* default that
+happens to be persisted, and the TUI's `s` picker does not write it. The GUI deliberately
+does not read it — honouring it would narrow the Snapshot with nothing on screen saying
+so.
 
 **Snapshot** — the corpus of Unified Messages produced by one Scan and held for reports to
 be aggregated from. A Snapshot is replaced only by another Scan; it does not expire.
@@ -78,7 +101,9 @@ next one warm. Nothing partial is left behind, and nothing is undone.
 **Report Filter** — the client, date-range and year constraints applied to Unified Messages
 *before* aggregation. Not a row filter: narrowing a Report Filter changes what each Entry
 means, not which Entries are displayed. Distinct from sorting and from column filtering,
-which act on Entries after the fact.
+which act on Entries after the fact — and distinct from **Enabled Clients**, which changes
+what there is to report on at all. Its Client constraint never causes a Scan; it is the
+only Client control the window has.
 
 ## Two meanings of "usage"
 

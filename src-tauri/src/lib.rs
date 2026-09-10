@@ -30,6 +30,7 @@ use tauri::Manager;
 mod commands;
 mod dto;
 mod pricing;
+mod settings;
 
 /// How long the backend waits for the frontend to show the window itself.
 /// Comfortably longer than a cold webview start, short enough that a user who

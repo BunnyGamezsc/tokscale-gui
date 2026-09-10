@@ -34,3 +34,23 @@ export function scanState(
   if (scan.hasSummary) return "refreshing";
   return delayPassed ? "first-run" : "settling";
 }
+
+/** What a Refresh will cost, said before it is taken.
+ *
+ *  Ticket 30's last acceptance box: no action may cost a rescan silently.
+ *  Refresh is the only one — the GUI's Enabled Clients are a constant, so no
+ *  Client control can trigger a Scan (CONTEXT.md: **Enabled Clients**) — and it
+ *  has two entrances, Overview's button and the shell's `R`, which is why the
+ *  sentence is a function rather than copy typed into whichever one you are
+ *  looking at.
+ *
+ *  Pure, so the number stays honest: the estimate is the previous run's, and a
+ *  machine that has never finished a Scan gets the range rather than a
+ *  confident figure it has no basis for. #28's cold run on the real corpus was
+ *  ~22 s with a warm pricing cache; the older 21-40 s is the unwarmed span, so
+ *  it is what an unmeasured machine is told.
+ */
+export function rescanNotice(etaSeconds: number | null): string {
+  const cost = etaSeconds ? `about ${etaSeconds}s` : "20-40 seconds";
+  return `Re-reads every client's transcripts from disk — ${cost}.`;
+}

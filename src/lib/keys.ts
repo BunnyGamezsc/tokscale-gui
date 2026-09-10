@@ -91,7 +91,12 @@ export function resolve(e: KeyLike, typing: boolean): Action | null {
 export function bindings(destinations: readonly string[]): { keys: string; label: string }[] {
   return [
     { keys: `⌘1 – ⌘${destinations.length}`, label: destinations.join(", ") },
-    { keys: "R", label: "Refresh — rescan the corpus" },
+    // The sheet is the only place `R` announces itself, so it carries the same
+    // warning Overview's button does (#30): a Refresh is the one action in the
+    // window that costs a Scan, and it must not cost one silently. The figure
+    // stays out of here — `rescanNotice` has the previous run's, and this list
+    // is pure over its destinations alone.
+    { keys: "R", label: "Refresh — re-reads every client's transcripts from disk, taking seconds" },
     { keys: "?", label: "Show this list" },
     { keys: "Tab", label: "Move focus. Enter or Space activates what it lands on" },
     { keys: "↓ ↑", label: "Contribution graph: next and previous day" },
