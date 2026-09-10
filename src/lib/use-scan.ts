@@ -9,6 +9,7 @@ import {
 import * as api from "./api";
 import { asArg, NO_FILTER, useFilter } from "./filter";
 import { graphState, PENDING_DELAY_MS, type GraphState } from "./graph-pending";
+import { scanState, SETTLE_DELAY_MS, type ScanState } from "./scan-state";
 
 /** Refresh has exactly one owner, and it is not a `useScan` call.
  *
@@ -44,6 +45,35 @@ function useAbandoned() {
 
 export const abandonScan = () => setAbandoned(true);
 
+/** How long the last real Scan took, kept across launches.
+ *
+ *  The only ETA the window can offer. A `ScanSummary` carries `elapsedMs` for
+ *  the run that just happened, but the unforced path returns 0 and a cold first
+ *  run has no run in front of it at all, so within one session the estimate was
+ *  only ever visible on a Refresh. The webview's own storage survives both a
+ *  reload and a relaunch, which is exactly the span the estimate is about;
+ *  there is no `gui.json` yet (P2) and this does not need one — it is a hint,
+ *  not state, and a machine that has never scanned correctly has none.
+ */
+const ETA_KEY = "tokscale.lastScanMs";
+
+function rememberDuration(ms: number) {
+  try {
+    if (ms > 0) localStorage.setItem(ETA_KEY, String(ms));
+  } catch {
+    // Storage can be unavailable or full. An estimate is not worth a crash.
+  }
+}
+
+function lastRunSeconds(): number | null {
+  try {
+    const ms = Number(localStorage.getItem(ETA_KEY));
+    return ms > 0 ? Math.round(ms / 1000) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Rescan. The one path that must actually re-parse: a new Snapshot makes every
  *  report read from the old one stale, so the whole cache goes with it. */
 export function refreshScan(qc: QueryClient) {
@@ -75,14 +105,17 @@ export function useScan() {
     queryFn: async () => {
       const forced = force;
       force = false;
-      return api.scan(undefined, forced);
+      const summary = await api.scan(undefined, forced);
+      rememberDuration(summary.elapsedMs);
+      return summary;
     },
     staleTime: Infinity,
     retry: false,
   });
 
   // An elapsed timer is the honest progress indicator: there is no percentage to
-  // show, because the parse reports nothing until it finishes.
+  // show, because the parse reports nothing until it finishes. Ticket 28 kept it
+  // that way — see ADR 0004 for why neither of the other two levers was pulled.
   useEffect(() => {
     if (!query.isFetching) return;
     const started = Date.now();
@@ -101,11 +134,38 @@ export function useScan() {
     /** True when the user stopped waiting but no result has landed yet. */
     abandoned: abandoned && query.isFetching,
     elapsed,
-    // The last run's duration is the only ETA worth showing, and the query keeps
-    // it across a refetch.
-    etaSeconds: query.data?.elapsedMs ? Math.round(query.data.elapsedMs / 1000) : null,
+    /** The previous run's duration, or `null` on a machine that has never
+     *  finished a Scan. Read from storage rather than from `query.data`, which
+     *  is 0 on the unforced path and absent entirely on a first run. */
+    etaSeconds: lastRunSeconds(),
     abandon: abandonScan,
   };
+}
+
+/** Which of the two waits the window is in, delay included. Same split as
+ *  `useGraphState`: the decision is pure and tested, this owns the timer. */
+export function useScanState(scan: { summary: unknown; scanning: boolean }): ScanState {
+  const delayPassed = useDelayPassed(scan.scanning, SETTLE_DELAY_MS);
+  return scanState({ hasSummary: scan.summary !== undefined, isScanning: scan.scanning }, delayPassed);
+}
+
+/** True once `active` has held for `ms`. Resets the moment it drops.
+ *
+ *  Shared by the two pending decisions because they need the same timer and
+ *  disagree only on the threshold and on what to do at each end of it. */
+function useDelayPassed(active: boolean, ms: number) {
+  const [passed, setPassed] = useState(false);
+
+  useEffect(() => {
+    if (!active) {
+      setPassed(false);
+      return;
+    }
+    const id = setTimeout(() => setPassed(true), ms);
+    return () => clearTimeout(id);
+  }, [active, ms]);
+
+  return passed;
 }
 
 /** Whether a Scan has landed, without owning its lifecycle.
@@ -175,6 +235,20 @@ export function useAllClients(ready: boolean) {
   });
 }
 
+/** Every Client a Scan reads, whether or not it is installed.
+ *
+ *  Not gated on anything: it is core's const registry, so it answers while the
+ *  Scan that would fill `useAllClients` is still running. That is the whole
+ *  point — it is what lets the first-run window name what is being read.
+ */
+export function useClientCatalog() {
+  return useQuery({
+    queryKey: ["client_catalog"],
+    queryFn: api.clientCatalog,
+    staleTime: Infinity,
+  });
+}
+
 export function useUnpriced(ready: boolean) {
   return useQuery({
     queryKey: ["unpriced"],
@@ -199,17 +273,9 @@ export function useCustomPricing() {
  *  had no pending state at all. The decision itself is `graphState`, kept pure
  *  and tested; this only owns the timer. */
 export function useGraphState(query: { data: unknown; isFetching: boolean }): GraphState {
-  const { isFetching } = query;
-  const [delayPassed, setDelayPassed] = useState(false);
-
-  useEffect(() => {
-    if (!isFetching) {
-      setDelayPassed(false);
-      return;
-    }
-    const id = setTimeout(() => setDelayPassed(true), PENDING_DELAY_MS);
-    return () => clearTimeout(id);
-  }, [isFetching]);
-
-  return graphState({ hasData: query.data !== undefined, isFetching }, delayPassed);
+  const delayPassed = useDelayPassed(query.isFetching, PENDING_DELAY_MS);
+  return graphState(
+    { hasData: query.data !== undefined, isFetching: query.isFetching },
+    delayPassed,
+  );
 }

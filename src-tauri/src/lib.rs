@@ -61,6 +61,7 @@ pub fn run() {
             commands::model_report,
             commands::graph_report,
             commands::clients,
+            commands::client_catalog,
             commands::unpriced,
             pricing::custom_pricing,
             pricing::set_custom_pricing,

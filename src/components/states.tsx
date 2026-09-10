@@ -1,8 +1,12 @@
 import { Button } from "@/components/ui/button";
 
-/** What a Scan looks like while it runs. Discovery-first text, an elapsed timer
- *  and an ETA from the previous run — there is no percentage, because the parse
- *  reports nothing until it finishes. */
+/** What a **Refresh** looks like while it runs: a banner, because a Snapshot is
+ *  already held and the numbers on screen are still the last answer. A first run
+ *  has nothing to sit above and gets `FirstRun` instead — that difference is the
+ *  one ticket 28 asked for.
+ *
+ *  An elapsed timer and the previous run's duration, and no percentage, because
+ *  the parse reports nothing until it finishes. */
 export function Scanning({
   elapsed,
   etaSeconds,
@@ -24,6 +28,74 @@ export function Scanning({
       <Button variant="outline" size="xs" className="ml-auto" onClick={onAbandon}>
         Abandon
       </Button>
+    </div>
+  );
+}
+
+/** A cold first run: no Snapshot, and 21-40 s before there is one.
+ *
+ *  Ticket 28 chose to spend the effort here rather than on progressive fill or a
+ *  sink-driven count (ADR 0004), so this panel carries what the wait can honestly
+ *  say: *what* is being read, how long it has taken, and how long it took last
+ *  time. Naming the Clients is the part that needed a new command — `clients`
+ *  reads the Snapshot and so cannot answer until the very wait this explains is
+ *  over, while `client_catalog` is core's const registry.
+ */
+export function FirstRun({
+  elapsed,
+  etaSeconds,
+  clients,
+  onAbandon,
+}: {
+  elapsed: number;
+  etaSeconds: number | null;
+  clients: string[];
+  onAbandon: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-start gap-3 py-16">
+      <div className="flex items-center gap-2.5">
+        <Spinner />
+        <h2 className="text-title font-semibold tracking-[-0.01em]">Reading your transcripts</h2>
+      </div>
+
+      <p className="max-w-[62ch] text-muted-foreground">
+        This is the first scan, so every supported client is checked and its transcripts are
+        parsed from scratch. Most machines have a handful; the rest are absent and are skipped.
+        Later runs read a cache and are much faster.
+      </p>
+
+      <p className="tnum font-mono text-small">
+        {elapsed}s
+        {etaSeconds ? (
+          <span className="text-muted-foreground"> / ~{etaSeconds}s last time</span>
+        ) : (
+          <span className="font-sans text-muted-foreground">
+            {" "}
+            — no previous run to estimate from; a first scan usually takes 20-40 seconds
+          </span>
+        )}
+      </p>
+
+      {clients.length > 0 && (
+        <details className="max-w-[62ch] text-small">
+          <summary className="cursor-pointer text-muted-foreground">
+            Looking for {clients.length} clients
+          </summary>
+          <p className="mt-2 font-mono text-micro leading-relaxed text-muted-foreground">
+            {clients.join(" · ")}
+          </p>
+        </details>
+      )}
+
+      {/* Same promise as the Abandoned screen, made before it is needed: this
+          button stops the wait, not the work. */}
+      <Button variant="outline" size="sm" onClick={onAbandon}>
+        Abandon
+      </Button>
+      <p className="text-micro text-muted-foreground">
+        Abandoning stops the wait. The scan finishes on its own and the next one starts warm.
+      </p>
     </div>
   );
 }

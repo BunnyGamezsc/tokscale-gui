@@ -95,6 +95,11 @@ export const graphReport = (filter?: Filter) => invoke<Day[]>("graph_report", { 
  *  its options stay the whole corpus. */
 export const clients = (filter?: Filter) => invoke<Client[]>("clients", { filter });
 
+/** Every Client a Scan reads, by display name, from core's const registry.
+ *  Needs no Snapshot and cannot fail, which is what makes it answerable while a
+ *  Scan is still running. */
+export const clientCatalog = () => invoke<string[]>("client_catalog");
+
 /** A model that spent tokens but produced no cost. */
 export interface Unpriced {
   model: string;

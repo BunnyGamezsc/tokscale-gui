@@ -97,22 +97,38 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 
 Overview, Models, Daily, Stats and Pricing views. Scan/report command surface. Design system
 and theming. Contribution graph. Manual pricing overrides. The Report Filter in the window
-chrome, shared across Views. The keyboard surface and its Shortcuts sheet.
+chrome, shared across Views. The keyboard surface and its Shortcuts sheet. The cold
+first-run experience.
 
 ## Open
 
 **All of the below is specced in [#20](https://github.com/BunnyGamezsc/tokscale-gui/issues/20)**
-and sliced into tickets **#21–#31**, plus **#32** from #27's decision. Start with #21, #22 or #23 — those have no blockers.
+and sliced into tickets **#21–#31**, plus **#32** from #27's decision. Start with #22 or #23 — those have no blockers.
 The list here stays as the plain-language index.
 
 Roughly in the order they bite.
 
-1. **Cold first-run.** A first scan is 21–40 s of spinner against an empty window. Main-thread
-   p99 stays at 86–241 ms so nothing freezes, but that is not the same as good. Levers:
-   scan one client at a time so the Overview fills progressively (zero fork cost, but pulling
-   cross-client work out of one call is unverified), a sink-driven message count (three `pub`
-   lines, advances in seven uneven lumps), or accept it and spend the effort on what the empty
-   window says. Also: is a first run visually distinct from a refresh?
+1. ~~**Cold first-run.**~~ Settled by #28 and written up in ADR 0004. The wait is still
+   21–40 s; what changed is that the window explains it.
+
+   - **Progressive fill was not taken, and the reason is not the parse.** `scan` already
+     takes a Filter whose `clients` is a real parse input, so scanning one Client at a time
+     is available today — but `scan` *replaces* the held Snapshot, so N per-Client scans
+     clobber each other, and N is **52**, not a handful. Reopen it on that list — an
+     accumulating Snapshot, a batching rule, a gate that is not an early return in five
+     Views, and a corpus test that it agrees with a single-call Scan — not on the fact that
+     `clients` is already a parse input. The sink-driven count stays rejected on #28's own
+     measurement.
+   - **A first run is `!hasSummary && isScanning`**, not a flag. `src/lib/scan-state.ts` is
+     the scan-side sibling of #32's `graph-pending.ts`; the two share one `useDelayPassed`.
+     Its 120 ms settle exists to stop a webview reload — an unforced `scan` returning the
+     held Snapshot in milliseconds — from flashing the first-run panel.
+   - **The window names what it is reading.** `client_catalog` reads core's const registry
+     (`ClientId::ALL` filtered by `parse_local`), so unlike `clients` it answers *during*
+     the Scan it describes.
+   - **The estimate is the previous run, in `localStorage`.** `ScanSummary.elapsedMs` is 0
+     on the unforced path and absent on a cold run, so the ETA was only ever visible on a
+     Refresh inside one session. Its absence on a true first run is said in words.
 
 2. ~~**`graph_report` re-enters the parse.**~~ Settled by #27: the ordering holds. A Scan
    warms the graph path, so the first visit to Daily costs 0.28–0.76 s, not 15 s. The fork

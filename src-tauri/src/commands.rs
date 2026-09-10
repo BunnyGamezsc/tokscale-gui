@@ -14,8 +14,8 @@ use std::time::Instant;
 use tokscale_core::{
     aggregate_model_usage_entries_with_rollup, filter_messages_for_report,
     generate_local_graph_report, model_report_token_totals,
-    parse_local_unified_messages_with_pricing, pricing::PricingService, GroupBy, LocalParseOptions,
-    ReportOptions, UnifiedMessage, WorktreeRollup,
+    parse_local_unified_messages_with_pricing, pricing::PricingService, ClientId, GroupBy,
+    LocalParseOptions, ReportOptions, UnifiedMessage, WorktreeRollup,
 };
 
 use crate::dto::{Client, Day, Entry, Report, ScanSummary, Unpriced};
@@ -309,6 +309,25 @@ pub async fn graph_report(filter: Option<Filter>) -> Result<Vec<Day>, String> {
         .collect())
 }
 
+/// Every Client a Scan reads, by display name.
+///
+/// Read off `ClientId::ALL` rather than the Snapshot, which is what makes it
+/// answerable *during* a Scan: `clients` below reports what a finished Scan
+/// found, so before one lands the window cannot name a single Client. This is
+/// the same set `resolve_local_parse_request` walks when no `clients` filter is
+/// given — every `parse_local` Client — minus core's own `synthetic` pseudo-
+/// source, which has no data location to read.
+///
+/// Const data, no Snapshot, no I/O: it spawns nothing and cannot fail, which is
+/// why it is not `async` and does not go through `blocking`.
+#[tauri::command]
+pub fn client_catalog() -> Vec<String> {
+    ClientId::iter()
+        .filter(|c| c.parse_local())
+        .map(|c| c.display_name().to_string())
+        .collect()
+}
+
 /// The Clients that produced usage, read off the Snapshot's aggregate.
 ///
 /// Ticket 09: this reads the aggregate, never `ScanResult::files` — "found, but
@@ -415,6 +434,24 @@ mod tests {
 
     use super::*;
     use tokscale_core::TokenBreakdown;
+
+    /// Ticket 28: the first-run window names what is being read, so the list it
+    /// names has to be the list a Scan actually walks. Both sides come from the
+    /// same registry; what this pins is the predicate and the omission.
+    #[test]
+    fn the_catalog_names_every_client_a_scan_reads() {
+        let catalog = client_catalog();
+        assert_eq!(
+            catalog.len(),
+            ClientId::iter().filter(|c| c.parse_local()).count(),
+            "the catalog must mirror resolve_local_parse_request's default set"
+        );
+        assert!(catalog.contains(&"Claude Code".to_string()));
+        // `synthetic` is core's pseudo-source, not a place on disk to look.
+        assert!(!catalog.iter().any(|c| c.eq_ignore_ascii_case("synthetic")));
+        // 52 of core's 53 declared Clients; one is submit-only.
+        assert_eq!(catalog.len(), 52);
+    }
 
     fn msg(client: &str, model: &str, date: &str, cost: f64) -> UnifiedMessage {
         UnifiedMessage {

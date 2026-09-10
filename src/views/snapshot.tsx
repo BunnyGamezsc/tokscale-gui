@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { useRefresh, useScan } from "@/lib/use-scan";
+import { useClientCatalog, useRefresh, useScan, useScanState } from "@/lib/use-scan";
 import { useFilter } from "@/lib/filter";
-import { Scanning, Abandoned, Failed, NoUsage } from "@/components/states";
+import { Scanning, Abandoned, Failed, FirstRun, NoUsage } from "@/components/states";
 
 /** Every view depends on the same Snapshot, and all four gate on it the same
  *  way: scanning, abandoned, failed, or empty. Returning the gate as an element
@@ -13,6 +13,9 @@ export function useSnapshot(): {
   refresh: () => void;
 } {
   const scan = useScan();
+  const state = useScanState(scan);
+  // Const data from core, so it answers during the very Scan it describes.
+  const catalog = useClientCatalog();
   // The one Refresh door, shared with the shell's `R` binding. `useScan` does
   // not hand one out: Refresh is window state, not a View's (ADR 0003).
   const refresh = useRefresh();
@@ -29,10 +32,25 @@ export function useSnapshot(): {
     gate = <Failed message={scan.error} onRetry={refresh} />;
   } else if (scan.abandoned) {
     gate = <Abandoned onRefresh={refresh} />;
-  } else if (scan.scanning) {
+  } else if (state === "first-run") {
+    gate = (
+      <FirstRun
+        elapsed={scan.elapsed}
+        etaSeconds={scan.etaSeconds}
+        clients={catalog.data ?? []}
+        onAbandon={scan.abandon}
+      />
+    );
+  } else if (state === "refreshing") {
     gate = (
       <Scanning elapsed={scan.elapsed} etaSeconds={scan.etaSeconds} onAbandon={scan.abandon} />
     );
+  } else if (state === "settling") {
+    // A Scan is in flight but it is almost certainly the unforced kind — a
+    // webview reload handed back the held Snapshot. Draw nothing for the ~120 ms
+    // that takes rather than flashing a first-run panel at someone who is not
+    // having one. Truthy, so the Views still hold their content back.
+    gate = <></>;
   } else if (scan.summary && scan.summary.messages === 0) {
     gate = <NoUsage />;
   }
