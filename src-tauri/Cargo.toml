@@ -2,7 +2,11 @@
 name = "tokscale-gui"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.77.2"
+# Measured, not guessed: `cargo +1.88 check --locked` builds, and 1.88 is the
+# highest `rust-version` any locked dependency declares (time, darling, plist),
+# so nothing older can. The toolchain actually used is pinned separately in
+# /rust-toolchain.toml.
+rust-version = "1.88"
 
 [lib]
 name = "tokscale_gui_lib"
@@ -24,7 +28,7 @@ serde_json = "1"
 # survives a missing submodule checkout, and overridden below to the submodule
 # working tree so day-to-day work edits real files rather than a cargo cache
 # clone. Bump both the tag here and the submodule when the fork moves.
-tokscale-core = { git = "https://github.com/BunnyGamezsc/tokscale.git", tag = "gui-v4.15.1-lib.1" }
+tokscale-core = { git = "https://github.com/BunnyGamezsc/tokscale.git", tag = "gui-v4.15.1-lib.2" }
 
 # Redirects the git dependency above to the vendored submodule. Cargo matches a
 # `[patch]` entry by source URL + package name, so the URL must be spelled

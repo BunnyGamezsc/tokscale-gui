@@ -27,7 +27,7 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 **Stack**
 
 - Tauri v2. One binary, no sidecar, no separate CLI.
-- `tokscale-core` as an in-process dependency, pinned to fork tag `gui-v4.15.1-lib.1` and
+- `tokscale-core` as an in-process dependency, pinned to fork tag `gui-v4.15.1-lib.2` and
   `[patch]`ed to the `vendor/tokscale` submodule (branch `lib-target`) for day-to-day work.
   Bump both together. See ADR 0001 and 0002.
 - React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui. pnpm.
@@ -103,12 +103,12 @@ Overview, Models, Daily, Stats and Pricing views. Scan/report command surface. D
 and theming. Contribution graph. Manual pricing overrides. The Report Filter in the window
 chrome, shared across Views. The keyboard surface and its Shortcuts sheet. The cold
 first-run experience. The `scanner` half of `settings.json`, read-only. Vendor CLI resolution
-and the sheet that reports it.
+and the sheet that reports it. A measured toolchain floor and pin.
 
 ## Open
 
 **All of the below is specced in [#20](https://github.com/BunnyGamezsc/tokscale-gui/issues/20)**
-and sliced into tickets **#21–#31**, plus **#32** from #27's decision. Start with #22 — it has no blockers.
+and sliced into tickets **#21–#31**, plus **#32** from #27's decision. #22 was the last of them.
 The list here stays as the plain-language index.
 
 Roughly in the order they bite.
@@ -241,10 +241,19 @@ Roughly in the order they bite.
      sidebar footer, because the packaged-build criterion cannot be checked unless the
      packaged app says what it resolved. A resolver, not a sync — P3 is still P3.
 
-7. **Rust toolchain floor.** `rust-version` in `src-tauri/Cargo.toml` says `1.77.2`, which is
-   untrue. The original 1.92 floor came from `specta`, which was dropped, so the real floor is
-   unknown rather than high. Establish it and pin it — `rust-toolchain.toml`, the manifest, or
-   both — and decide whether the submodule needs its own.
+7. **Rust toolchain floor — decided (#22).** Two files, two jobs:
+   - **Floor: `rust-version = "1.88"`** in `src-tauri/Cargo.toml`. Measured by building the
+     reverted tree on 1.88, and 1.88 is also the highest `rust-version` any locked dependency
+     declares, so nothing older can build. On 1.87, cargo refuses before compiling anything.
+   - **Pin: `/rust-toolchain.toml` at `1.98.1`**, the toolchain everything is built and tested
+     on. rustup finds it from `src-tauri/` and `vendor/tokscale/` too. The pin does not keep the
+     floor true: re-measure with `cargo +1.88 check --locked` after dependency bumps.
+   - **No pin in the fork.** Anyone building the fork standalone would inherit it, and it
+     would be one more file on the fork's permanent conflict surface. Inside this checkout,
+     the root pin already applies.
+   - The fork's `specta` feature is reverted (tag `gui-v4.15.1-lib.2`). That tag also puts the
+     public P1 entry points on origin: `lib.1` predated them, so only the `[patch]` was
+     building.
 
 ## Not yet specified
 

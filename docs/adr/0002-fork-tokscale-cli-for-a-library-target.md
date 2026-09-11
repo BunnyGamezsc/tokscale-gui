@@ -66,3 +66,21 @@ crate, so TypeScript type derives must be added to `tokscale-core` inside the fo
 The fork therefore spans both crates, and ADR 0001's dependency resolves to it rather than
 to upstream. The merge conflict surface grows accordingly: no longer one added file plus a
 reduced `main.rs`, but also every core struct carrying a derive attribute.
+
+**Amended 2026-09-10**, reversing the amendment above. No derive was ever added to core.
+The feature and the workspace dependency were plumbing with nothing behind them, and they
+are reverted in the fork (`gui-v4.15.1-lib.2`). The GUI's IPC boundary is hand-written DTOs
+instead. P1 reads 15 fields, not 150, and core's shapes mix snake_case and camelCase, so
+deriving over them would have exported that inconsistency to TypeScript. ADR 0001 records
+the reasoning, and the consequence that the two sides of the boundary are kept in step by
+hand, with no compiler check.
+
+The conflict surface is back to this ADR's original scope: `crates/tokscale-cli/src/lib.rs`
+plus the reduced `main.rs`. There is one exception: a single change to
+`crates/tokscale-core/src/lib.rs` that makes three P1 aggregation entry points
+(`aggregate_model_usage_entries_with_rollup`, `model_report_token_totals`,
+`filter_messages_for_report`) public. Those are visibility changes, not new code.
+
+The `tokscale-cli` library target exists in the fork but is not yet a dependency of the GUI
+crate, which depends on `tokscale-core` alone. It is dormant, not missing: P3 adds the
+dependency when auth and sync are built.

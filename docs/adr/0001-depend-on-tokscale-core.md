@@ -55,3 +55,21 @@ conflict surface on upstream merges grows to include any core struct carrying a 
 The GUI is coupled to `tokscale-core`'s internal API, which carries no stability
 guarantee. Upstream refactors will break the build. This is accepted as the cost of not
 owning the parsers, and is mitigated by pinning rather than tracking a branch.
+
+**Amended 2026-09-10**, reversing the amendment above. The research was right about the
+constraint and wrong about the conclusion. `#[specta(remote)]` does fail the orphan rule
+from the GUI crate, but the alternative was never 150 duplicated fields: P1 reads 15. And
+core's own shapes are inconsistent in their casing (`ModelUsage` is snake_case, its nested
+`ModelPerformance` camelCase), so serializing them directly would export that seam to
+TypeScript. The boundary is therefore hand-written DTOs in `src-tauri/src/dto.rs`, uniformly
+camelCase because they are declared so in that one module, and no types are generated.
+
+The cost is that `dto.rs` and `src/lib/api.ts` are kept in step by hand, with no compiler
+check between them. At fifteen fields that is accepted. If P2 grows the surface enough to
+want generation, `tauri-specta` can derive from the GUI's own DTOs, which are local types,
+so the orphan rule no longer applies and nothing has to move back into core.
+
+The dependency still resolves to the fork rather than upstream, but now only because ADR
+0002 forked the repository for its CLI library target, and because the fork makes three
+P1 aggregation entry points public. The fork's `specta` feature, which the GUI never
+enabled, has been reverted.
