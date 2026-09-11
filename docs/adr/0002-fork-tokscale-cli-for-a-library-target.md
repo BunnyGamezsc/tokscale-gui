@@ -70,16 +70,16 @@ reduced `main.rs`, but also every core struct carrying a derive attribute.
 **Amended 2026-09-10**, reversing the amendment above. No derive was ever added to core.
 The feature and the workspace dependency were plumbing with nothing behind them, and they
 are reverted in the fork (`gui-v4.15.1-lib.2`). The GUI's IPC boundary is hand-written DTOs
-instead. P1 reads 15 fields, not 150, and core's shapes mix snake_case and camelCase, so
-deriving over them would have exported that inconsistency to TypeScript. ADR 0001 records
-the reasoning, and the consequence that the two sides of the boundary are kept in step by
-hand, with no compiler check.
+instead; ADR 0001 records why, and what that costs.
 
-The conflict surface is back to this ADR's original scope: `crates/tokscale-cli/src/lib.rs`
-plus the reduced `main.rs`. There is one exception: a single change to
-`crates/tokscale-core/src/lib.rs` that makes three P1 aggregation entry points
-(`aggregate_model_usage_entries_with_rollup`, `model_report_token_totals`,
-`filter_messages_for_report`) public. Those are visibility changes, not new code.
+The conflict surface is back to this ADR's original scope: the library-target commit and
+nothing wider. That commit was never "one added file" as first written, though. It adds
+`lib.rs` and `shared.rs` (426 lines moved out of `main.rs`), reduces `main.rs`, and makes
+small edits to the CLI's `Cargo.toml`, `tui/mod.rs`, `tui/ui/mod.rs` and `warp.rs`. Beyond
+it there is one change to `crates/tokscale-core/src/lib.rs`, which makes three P1
+aggregation entry points (`aggregate_model_usage_entries_with_rollup`,
+`model_report_token_totals`, `filter_messages_for_report`) public. That is a visibility
+change, not new code.
 
 The `tokscale-cli` library target exists in the fork but is not yet a dependency of the GUI
 crate, which depends on `tokscale-core` alone. It is dormant, not missing: P3 adds the

@@ -65,7 +65,8 @@ TypeScript. The boundary is therefore hand-written DTOs in `src-tauri/src/dto.rs
 camelCase because they are declared so in that one module, and no types are generated.
 
 The cost is that `dto.rs` and `src/lib/api.ts` are kept in step by hand, with no compiler
-check between them. At fifteen fields that is accepted. If P2 grows the surface enough to
+check between them. The DTOs carry about forty fields across the whole boundary, P2
+additions included, and at that size the cost is accepted. If P2 grows the surface enough to
 want generation, `tauri-specta` can derive from the GUI's own DTOs, which are local types,
 so the orphan rule no longer applies and nothing has to move back into core.
 
