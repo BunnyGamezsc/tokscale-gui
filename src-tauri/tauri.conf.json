@@ -50,6 +50,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "../vendor/tokscale/LICENSE": "licenses/tokscale-LICENSE"
+    },
     "macOS": {
       "minimumSystemVersion": "10.15"
     }
