@@ -1,3 +1,4 @@
+import { calendarSpan } from "@/lib/calendar";
 import {
   Table,
   TableBody,
@@ -28,6 +29,7 @@ export function OverviewView() {
 
   return (
     <>
+      {snap.banner}
       <ViewHeader title="Overview" filter={snap.rangeLabel}>
         <RescanButton onRefresh={snap.refresh} etaSeconds={snap.etaSeconds} />
       </ViewHeader>
@@ -37,7 +39,7 @@ export function OverviewView() {
           ["Total cost", r ? fmtCost(r.totalCost) : "—"],
           ["Tokens", r ? fmtTokens(r.totalInput + r.totalOutput + r.totalCacheRead) : "—"],
           ["Messages", r ? fmtInt(r.totalMessages) : "—"],
-          ["Active days", days.length ? `${active}/${days.length}` : "—"],
+          ["Active days", days.length ? `${active}/${calendarSpan(days).length}` : "—"],
         ]}
       />
 

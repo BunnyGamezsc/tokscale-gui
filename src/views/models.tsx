@@ -80,6 +80,7 @@ export function ModelsView() {
 
   return (
     <>
+      {snap.banner}
       <ViewHeader title="Models" filter={snap.rangeLabel}>
         <Tabs value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
           <TabsList>

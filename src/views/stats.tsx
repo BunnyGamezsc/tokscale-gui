@@ -26,12 +26,13 @@ export function StatsView() {
 
   return (
     <>
+      {snap.banner}
       <ViewHeader title="Stats" filter={snap.rangeLabel} />
 
       <Replacing on={graphState === "replacing"}>
         <Tiles
           items={[
-            ["Active days", days.length ? `${active.length}/${days.length}` : "—"],
+            ["Active days", days.length ? `${active.length}/${calendarSpan(days).length}` : "—"],
             // Over the calendar, not over the rows — see `calendarSpan`.
             [
               "Longest streak",

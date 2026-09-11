@@ -1,3 +1,4 @@
+import { calendarSpan } from "@/lib/calendar";
 import {
   Table,
   TableBody,
@@ -37,12 +38,13 @@ export function DailyView() {
 
   return (
     <>
+      {snap.banner}
       <ViewHeader title="Daily" filter={snap.rangeLabel} />
 
       <Replacing on={graphState === "replacing"}>
         <Tiles
           items={[
-            ["Active days", graph.data ? `${days.length}/${graph.data.length}` : "—"],
+            ["Active days", graph.data ? `${days.length}/${calendarSpan(graph.data).length}` : "—"],
             ["Busiest day", busiest?.date ?? "—"],
             ["Busiest day cost", busiest ? fmtCost(busiest.cost) : "—"],
             ["Total cost", days.length ? fmtCost(total) : "—"],

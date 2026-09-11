@@ -87,7 +87,7 @@ export const modelReport = (groupBy: GroupBy, filter?: Filter) =>
   invoke<Report>("model_report", { groupBy, filter });
 
 /** Re-enters the parse rather than reading the Snapshot — the one asymmetry in
- *  the surface. ~0.9s, invalidated only by a scan. */
+ *  the surface. 0.28-0.76 s after a Scan (#27), invalidated only by a scan. */
 export const graphReport = (filter?: Filter) => invoke<Day[]>("graph_report", { filter });
 
 /** The Clients that produced usage. Takes a Report Filter so Stats' per-Client

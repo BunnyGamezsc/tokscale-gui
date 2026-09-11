@@ -36,6 +36,7 @@ export function PricingView() {
 
   return (
     <>
+      {snap.banner}
       <ViewHeader title="Pricing" filter={snap.rangeLabel} />
 
       <Tiles

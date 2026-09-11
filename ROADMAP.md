@@ -43,7 +43,7 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 **Backend shape**
 
 - `scan` parses the corpus once into a Snapshot held in `tauri::State`. Report commands
-  re-aggregate from it (41–100 ms) rather than rescanning (~2 min cold).
+  re-aggregate from it (41–100 ms) rather than rescanning (21–40 s cold).
 - Unforced `scan` returns the held Snapshot, so a webview reload costs nothing. Refresh forces.
 - Everything runs on `spawn_blocking` — a cold scan on the async runtime starves every other
   command.

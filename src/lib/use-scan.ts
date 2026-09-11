@@ -74,12 +74,18 @@ function lastRunSeconds(): number | null {
   }
 }
 
-/** Rescan. The one path that must actually re-parse: a new Snapshot makes every
- *  report read from the old one stale, so the whole cache goes with it. */
+/** Rescan. The one path that must actually re-parse.
+ *
+ *  Only `["scan"]` is invalidated here; the reports go when the new Snapshot
+ *  lands (see `useScan`), because refetched now they would read the old one and
+ *  be cached as current. And one parse at a time: a second forced `scan` does
+ *  not stop the first, which runs on in `spawn_blocking`. So during a Scan this
+ *  only resumes the wait — which is what "Wait for it" and a held `R` want. */
 export function refreshScan(qc: QueryClient) {
   setAbandoned(false);
+  if (qc.isFetching({ queryKey: ["scan"] })) return;
   force = true;
-  qc.invalidateQueries();
+  void qc.invalidateQueries({ queryKey: ["scan"] });
 }
 
 /** Refresh, from anywhere — the shell's `R` binding included. */
@@ -99,6 +105,7 @@ export function useRefresh() {
 export function useScan() {
   const abandoned = useAbandoned();
   const [elapsed, setElapsed] = useState(0);
+  const qc = useQueryClient();
 
   const query = useQuery({
     queryKey: ["scan"],
@@ -107,6 +114,9 @@ export function useScan() {
       force = false;
       const summary = await api.scan(undefined, forced);
       rememberDuration(summary.elapsedMs);
+      // The backend holds the new Snapshot by the time `scan` returns, so every
+      // report read from the old one is refetched now, not at Refresh.
+      if (forced) void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== "scan" });
       return summary;
     },
     staleTime: Infinity,

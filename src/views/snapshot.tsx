@@ -10,6 +10,7 @@ export function useSnapshot(): {
   ready: boolean;
   rangeLabel: string | undefined;
   gate: ReactNode | null;
+  banner: ReactNode | null;
   refresh: () => void;
   /** The previous run's duration, for the warning a Refresh owes before it is
    *  taken (#30). Read here rather than in the button, because `useScan` has
@@ -45,10 +46,6 @@ export function useSnapshot(): {
         onAbandon={scan.abandon}
       />
     );
-  } else if (state === "refreshing") {
-    gate = (
-      <Scanning elapsed={scan.elapsed} etaSeconds={scan.etaSeconds} onAbandon={scan.abandon} />
-    );
   } else if (state === "settling") {
     // A Scan is in flight but it is almost certainly the unforced kind — a
     // webview reload handed back the held Snapshot. Draw nothing for the ~120 ms
@@ -63,6 +60,12 @@ export function useSnapshot(): {
     ready: Boolean(scan.summary && scan.summary.messages > 0),
     rangeLabel,
     gate,
+    // A Refresh sits *above* the View, not in place of it: the numbers on
+    // screen are still the last answer (#28).
+    banner:
+      state === "refreshing" ? (
+        <Scanning elapsed={scan.elapsed} etaSeconds={scan.etaSeconds} onAbandon={scan.abandon} />
+      ) : null,
     refresh,
     etaSeconds: scan.etaSeconds,
   };

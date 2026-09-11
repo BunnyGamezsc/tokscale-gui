@@ -72,8 +72,9 @@ The feature and the workspace dependency were plumbing with nothing behind them,
 are reverted in the fork (`gui-v4.15.1-lib.2`). The GUI's IPC boundary is hand-written DTOs
 instead; ADR 0001 records why, and what that costs.
 
-The conflict surface is back to this ADR's original scope: the library-target commit and
-nothing wider. That commit was never "one added file" as first written, though. It adds
+The conflict surface is back to this ADR's original scope, the library-target commit,
+plus one visibility change in core described below. That commit was never "one added
+file" as first written, though. It adds
 `lib.rs` and `shared.rs` (426 lines moved out of `main.rs`), reduces `main.rs`, and makes
 small edits to the CLI's `Cargo.toml`, `tui/mod.rs`, `tui/ui/mod.rs` and `warp.rs`. Beyond
 it there is one change to `crates/tokscale-core/src/lib.rs`, which makes three P1

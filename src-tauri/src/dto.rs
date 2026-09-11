@@ -81,10 +81,6 @@ pub struct ScanSummary {
 
 impl ScanSummary {
     pub fn of(messages: &[UnifiedMessage], elapsed_ms: u32) -> Self {
-        let mut clients: Vec<&str> = messages.iter().map(|m| m.client.as_str()).collect();
-        clients.sort_unstable();
-        clients.dedup();
-
         // `date` is already Bucket Timezone-bucketed by core, so this is the
         // real calendar day rather than a slice of a timestamp.
         let mut days: Vec<&str> = messages.iter().map(|m| m.date.as_str()).collect();
@@ -140,7 +136,7 @@ pub struct Unpriced {
 ///
 /// `state` is `"onPath"`, `"offPath"` or `"missing"` — the three arms of
 /// `vendor::Resolution`, kept as a string rather than a tagged enum because the
-/// boundary is 15 fields of plain data and this is three more (ADR 0006).
+/// boundary is plain data and this is three more fields of it (ADR 0006).
 /// `path` is `None` only for `"missing"`.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

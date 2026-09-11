@@ -10,8 +10,6 @@
 //!   `vendor_clis` (#23); the rule they all still follow is the one above.
 //! - `scan` parses once into a snapshot held in `tauri::State`; the report
 //!   commands re-aggregate from that snapshot rather than rescanning.
-//! - Progress is a `scan:progress` Tauri event, emitted around the discovery
-//!   phase only.
 //! - camelCase across the whole boundary. Ticket 09 planned to get that from
 //!   `#[derive(specta::Type)]` in the forked core; building it showed P1 reads
 //!   15 fields rather than the ~150 that made GUI-side DTOs look expensive, so

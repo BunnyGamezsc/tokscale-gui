@@ -118,6 +118,13 @@ where
         .map_err(|e| format!("worker thread failed: {e}"))?
 }
 
+/// The held Snapshot, cloned out from under the lock so the report commands
+/// can fold it inside `blocking` without holding the lock there.
+fn held(state: &Snapshot) -> Result<Vec<UnifiedMessage>, String> {
+    let guard = state.0.lock().map_err(|_| "snapshot lock poisoned")?;
+    Ok(guard.as_ref().ok_or("no snapshot: run a scan first")?.clone())
+}
+
 /// Walks every enabled Client's data locations and parses transcripts into
 /// Unified Messages, replacing the held Snapshot.
 ///
@@ -182,15 +189,16 @@ pub async fn model_report(
     let group_by = parse_group_by(&group_by)?;
     let filter = filter.unwrap_or_default();
     let started = Instant::now();
+    let messages = held(&state)?;
+    blocking(move || Ok(report_of(messages, &group_by, &filter, started))).await
+}
 
-    let messages = {
-        let guard = state.0.lock().map_err(|_| "snapshot lock poisoned")?;
-        guard
-            .as_ref()
-            .ok_or("no snapshot: run a scan first")?
-            .clone()
-    };
-
+fn report_of(
+    messages: Vec<UnifiedMessage>,
+    group_by: &GroupBy,
+    filter: &Filter,
+    started: Instant,
+) -> Report {
     let options = filter.report_options(group_by.clone());
     let filtered = filter_messages_for_report(filter.narrow_clients(messages), &options);
     let total_messages = filtered.iter().map(|m| m.message_count).sum();
@@ -198,7 +206,7 @@ pub async fn model_report(
         aggregate_model_usage_entries_with_rollup(filtered, &group_by, WorktreeRollup::default());
     let (total_input, total_output, total_cache_read, _) = model_report_token_totals(&entries);
 
-    Ok(Report {
+    Report {
         total_cost: entries.iter().map(|e| e.cost).sum(),
         entries: entries.iter().map(Entry::from).collect(),
         total_input,
@@ -206,7 +214,7 @@ pub async fn model_report(
         total_cache_read,
         total_messages,
         elapsed_ms: started.elapsed().as_millis() as u32,
-    })
+    }
 }
 
 /// Which Ramp step a day's cost falls on, given every active day's cost.
@@ -348,14 +356,12 @@ pub async fn clients(
     state: tauri::State<'_, Snapshot>,
     filter: Option<Filter>,
 ) -> Result<Vec<Client>, String> {
+    let messages = held(&state)?;
     let filter = filter.unwrap_or_default();
-    let messages = {
-        let guard = state.0.lock().map_err(|_| "snapshot lock poisoned")?;
-        guard
-            .as_ref()
-            .ok_or("no snapshot: run a scan first")?
-            .clone()
-    };
+    blocking(move || Ok(clients_of(messages, &filter))).await
+}
+
+fn clients_of(messages: Vec<UnifiedMessage>, filter: &Filter) -> Vec<Client> {
     let messages = filter_messages_for_report(
         filter.narrow_clients(messages),
         &filter.report_options(GroupBy::Model),
@@ -378,7 +384,7 @@ pub async fn clients(
             .partial_cmp(&a.cost)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    Ok(out)
+    out
 }
 
 /// Models carrying tokens but no cost.
@@ -389,14 +395,11 @@ pub async fn clients(
 /// rate is for.
 #[tauri::command]
 pub async fn unpriced(state: tauri::State<'_, Snapshot>) -> Result<Vec<Unpriced>, String> {
-    let messages = {
-        let guard = state.0.lock().map_err(|_| "snapshot lock poisoned")?;
-        guard
-            .as_ref()
-            .ok_or("no snapshot: run a scan first")?
-            .clone()
-    };
+    let messages = held(&state)?;
+    blocking(move || Ok(unpriced_of(messages))).await
+}
 
+fn unpriced_of(messages: Vec<UnifiedMessage>) -> Vec<Unpriced> {
     let mut by_model: std::collections::BTreeMap<String, Unpriced> = Default::default();
     for m in &messages {
         let entry = by_model
@@ -429,7 +432,7 @@ pub async fn unpriced(state: tauri::State<'_, Snapshot>) -> Result<Vec<Unpriced>
         .collect();
     // Most tokens first: that is the row where a rate is worth the most.
     out.sort_by_key(|u| std::cmp::Reverse(u.input + u.output + u.cache_read + u.cache_write));
-    Ok(out)
+    out
 }
 
 #[cfg(test)]
