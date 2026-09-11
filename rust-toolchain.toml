@@ -1,0 +1,14 @@
+# The toolchain this repo is built and tested on. rustup reads this from any
+# directory beneath the root, including `src-tauri/` and `vendor/tokscale/`.
+#
+# This is a pin, not the floor. The floor is `rust-version` in
+# `src-tauri/Cargo.toml`, measured by building on it; it is not re-checked when
+# this moves, so re-measure with `cargo +<floor> check --locked` from
+# `src-tauri/` before relying on it.
+[toolchain]
+channel = "1.98.1"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+# Both Mac architectures ship; x86_64 cross-compiles from Apple silicon with
+# `pnpm tauri build --target x86_64-apple-darwin`, no Rosetta involved.
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]

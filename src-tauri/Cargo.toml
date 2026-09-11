@@ -1,0 +1,41 @@
+[package]
+name = "tokscale-gui"
+version = "1.0.0-pre"
+edition = "2021"
+# Measured, not guessed: `cargo +1.88 check --locked` builds, and 1.88 is the
+# highest `rust-version` any locked dependency declares, so nothing older can. The toolchain actually used is pinned separately in
+# /rust-toolchain.toml.
+rust-version = "1.88"
+
+[lib]
+name = "tokscale_gui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# The forked tokscale (ADR 0001/0002). `tokscale-core` carries the
+# scanning/aggregation/pricing engine; `tokscale-cli`'s library target (which
+# only exists in the fork) carries auth and sync for P3.
+#
+# Declared against the fork's git tag so the pin is recorded in a form that
+# survives a missing submodule checkout, and overridden below to the submodule
+# working tree so day-to-day work edits real files rather than a cargo cache
+# clone. Bump both the tag here and the submodule when the fork moves.
+tokscale-core = { git = "https://github.com/BunnyGamezsc/tokscale.git", tag = "gui-v4.15.1-lib.2" }
+
+# Redirects the git dependency above to the vendored submodule. Cargo matches a
+# `[patch]` entry by source URL + package name, so the URL must be spelled
+# exactly as the dependency spells it. This section is only honoured in a
+# workspace root; `src-tauri` is its own root, which is why it lives here.
+[patch."https://github.com/BunnyGamezsc/tokscale.git"]
+tokscale-core = { path = "../vendor/tokscale/crates/tokscale-core" }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
