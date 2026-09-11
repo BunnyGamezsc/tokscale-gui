@@ -48,7 +48,7 @@ const LABELS_HEIGHT = 14;
  *  in `overflow-x-auto`, which computes `overflow-y` to `auto` as well, so a
  *  ring on the top row or the last column is cut off without this. */
 const RING = 3;
-export const GRAPH_HEIGHT = LABELS_HEIGHT + GAP + GRID_HEIGHT + 2 * RING;
+export const GRAPH_HEIGHT = LABELS_HEIGHT + GAP + GRID_HEIGHT + GAP + LABELS_HEIGHT + 2 * RING;
 
 export function ContributionGraph({
   days,
@@ -146,7 +146,7 @@ function Year({
   const columns = { gridTemplateColumns: `repeat(${weeks}, ${CELL}px)`, columnGap: GAP };
 
   return (
-    <div style={{ width: weeks * (CELL + GAP) - GAP + 2 * RING, padding: RING }}>
+    <div className="group/graph" style={{ width: weeks * (CELL + GAP) - GAP + 2 * RING, padding: RING }}>
       {/* Month labels. A year of squares with nothing to read a date off fits at
           the minimum width without being legible at it. */}
       <div
@@ -211,6 +211,19 @@ function Year({
           );
         })}
       </div>
+
+      {/* #29: the value on focus, not only on hover. `title` is pointer-only, so
+          a sighted keyboard user gets this line; the height is always reserved
+          so focusing the grid shifts nothing. Screen readers have `aria-label`. */}
+      {!pending && (
+        <div
+          aria-hidden
+          className="invisible font-mono text-micro text-muted-foreground group-focus-within/graph:visible"
+          style={{ height: LABELS_HEIGHT, marginTop: GAP }}
+        >
+          {cells[focus] && label(cells[focus])}
+        </div>
+      )}
     </div>
   );
 }

@@ -20,6 +20,7 @@ export function prune(next: Filter): Filter {
   const out: Filter = {};
   if (next.since) out.since = next.since;
   if (next.until) out.until = next.until;
+  if (next.year) out.year = next.year;
   // No Clients ticked means no constraint, not "no Clients" — the backend reads
   // an empty selection as the latter, so it must never be sent one.
   if (next.clients?.length) out.clients = [...next.clients].sort();

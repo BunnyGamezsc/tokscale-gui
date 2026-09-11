@@ -1,6 +1,6 @@
 //! The P1 command surface designed by ticket 09.
 //!
-//! Five commands over a backend Snapshot. `scan` parses the corpus once into
+//! Six commands over a backend Snapshot (the list is in `lib.rs`). `scan` parses the corpus once into
 //! `tauri::State`; the report commands re-aggregate from what is held rather
 //! than rescanning, which ticket 09 measured at 41-100 ms against 879-3518 ms.
 //!
@@ -145,35 +145,31 @@ pub async fn scan(
     let filter = filter.unwrap_or_default();
     let started = Instant::now();
 
-    let messages = blocking(move || {
-        tauri::async_runtime::block_on(async move {
-            // A forced rescan re-reads the manual pricing overrides. The cached
-            // service would not: it reads `custom-pricing.json` once per launch,
-            // so a rate entered in this session would not show up until restart.
-            match crate::pricing::reloaded() {
-                Some(fresh) => {
-                    parse_local_unified_messages_with_pricing(filter.parse_options(), Some(&fresh))
-                        .await
-                }
-                None => {
-                    // No upstream pricing cached on disk yet, so this is the
-                    // first scan: fetch through the shared service, which also
-                    // populates those caches for the branch above.
-                    let pricing = PricingService::get_or_init().await.ok();
-                    parse_local_unified_messages_with_pricing(
-                        filter.parse_options(),
-                        pricing.as_deref(),
-                    )
-                    .await
-                }
-            }
-        })
-    })
-    .await?;
+    let messages =
+        blocking(move || tauri::async_runtime::block_on(priced_parse(filter.parse_options())))
+            .await?;
 
     let summary = ScanSummary::of(&messages, started.elapsed().as_millis() as u32);
     *state.0.lock().map_err(|_| "snapshot lock poisoned")? = Some(messages);
     Ok(summary)
+}
+
+/// The Snapshot parse, pricing included — what `scan` runs, and what the two
+/// ignored probes below run so they measure the app's call rather than a copy.
+async fn priced_parse(options: LocalParseOptions) -> Result<Vec<UnifiedMessage>, String> {
+    // A forced rescan re-reads the manual pricing overrides. The cached
+    // service would not: it reads `custom-pricing.json` once per launch,
+    // so a rate entered in this session would not show up until restart.
+    match crate::pricing::reloaded() {
+        Some(fresh) => parse_local_unified_messages_with_pricing(options, Some(&fresh)).await,
+        None => {
+            // No upstream pricing cached on disk yet, so this is the
+            // first scan: fetch through the shared service, which also
+            // populates those caches for the branch above.
+            let pricing = PricingService::get_or_init().await.ok();
+            parse_local_unified_messages_with_pricing(options, pricing.as_deref()).await
+        }
+    }
 }
 
 /// Re-aggregates the held Snapshot under a Group-By and Report Filter.
@@ -311,7 +307,9 @@ pub async fn graph_report(filter: Option<Filter>) -> Result<Vec<Day>, String> {
         .iter()
         .map(|c| Day {
             date: c.date.clone(),
-            level: ramp_level(&active, c.totals.cost),
+            // A day spent entirely on unpriced models costs $0 but is not
+            // absence (#29): it takes the bottom step rather than `--ramp-0`.
+            level: ramp_level(&active, c.totals.cost).max(u8::from(c.totals.tokens > 0)),
             cost: c.totals.cost,
             tokens: c.totals.tokens,
         })
@@ -699,30 +697,10 @@ mod tests {
                 .unwrap_or_else(|_| "default (warm arm)".to_string())
         );
 
-        // Exactly what `scan` runs, pricing branch included: a Snapshot built
-        // without pricing warms the same parse cache but is not the call the
-        // app makes.
         let started = Instant::now();
-        let snapshot = tauri::async_runtime::block_on(async {
-            match crate::pricing::reloaded() {
-                Some(fresh) => {
-                    parse_local_unified_messages_with_pricing(
-                        Filter::default().parse_options(),
-                        Some(&fresh),
-                    )
-                    .await
-                }
-                None => {
-                    let pricing = PricingService::get_or_init().await.ok();
-                    parse_local_unified_messages_with_pricing(
-                        Filter::default().parse_options(),
-                        pricing.as_deref(),
-                    )
-                    .await
-                }
-            }
-        })
-        .expect("scan");
+        let snapshot =
+            tauri::async_runtime::block_on(priced_parse(Filter::default().parse_options()))
+                .expect("scan");
         let summary = ScanSummary::of(&snapshot, started.elapsed().as_millis() as u32);
         println!(
             "scan: {} ms, {} messages, {} - {}",
@@ -841,20 +819,12 @@ mod tests {
     #[test]
     #[ignore]
     fn daily_detail_agrees_with_the_daily_row() {
-        // The Snapshot must be built with pricing, exactly as `scan` builds it.
-        // Without it every message costs 0.0 while `graph_report` fetches its
-        // own rates, and the two paths disagree for a reason that has nothing
-        // to do with how a day is bucketed. It is built unnarrowed, because
-        // `scan` never takes the Report Filter — narrowing is report-time.
-        let snapshot = tauri::async_runtime::block_on(async {
-            let pricing = PricingService::get_or_init().await.ok();
-            parse_local_unified_messages_with_pricing(
-                Filter::default().parse_options(),
-                pricing.as_deref(),
-            )
-            .await
-        })
-        .expect("scan");
+        // Built with pricing, as `scan` builds it: without it every message
+        // costs 0.0 and the paths disagree for a reason unrelated to bucketing.
+        // Unnarrowed, because narrowing is report-time.
+        let snapshot =
+            tauri::async_runtime::block_on(priced_parse(Filter::default().parse_options()))
+                .expect("scan");
         println!("snapshot: {} messages", snapshot.len());
 
         // One arm: every active day of `base`'s graph, checked against the
