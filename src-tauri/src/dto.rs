@@ -135,3 +135,17 @@ pub struct Unpriced {
     pub messages: i32,
     pub cost: f64,
 }
+
+/// Where one vendor CLI was found, for the window to say so.
+///
+/// `state` is `"onPath"`, `"offPath"` or `"missing"` — the three arms of
+/// `vendor::Resolution`, kept as a string rather than a tagged enum because the
+/// boundary is 15 fields of plain data and this is three more (ADR 0006).
+/// `path` is `None` only for `"missing"`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VendorCli {
+    pub name: String,
+    pub state: &'static str,
+    pub path: Option<String>,
+}

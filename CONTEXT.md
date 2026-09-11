@@ -18,6 +18,18 @@ from its own state, and *parse_local* when its transcripts are read directly fro
 `openai`, …). Independent of Client: one Client can route to many Providers, and one
 Provider serves many Clients.
 
+**Vendor CLI** — GUI-coined: upstream spawns these six binaries but has no collective noun
+for them, so this is a name for a set upstream leaves unnamed rather than a term borrowed
+from it. A vendor's own command-line tool that tokscale *spawns*, as opposed to a
+Client whose transcripts it *reads*. Six of them: `codex`, `gh`, `kiro-cli`, `gemini`,
+`claude`, `grok`. The overlap with Client is partial and the two words are not
+interchangeable — Claude Code is a Client and `claude` is a Vendor CLI, but `gh` is a
+Vendor CLI that is no Client, and most Clients have no Vendor CLI at all. Upstream spawns
+each by bare name, which a `.app` launched from Finder cannot resolve; `vendor::resolve`
+answers with **on this PATH**, **off this PATH** (installed, but somewhere the inherited
+environment does not name) or **not installed**, and those three are deliberately not one
+failure (#23, ADR 0006).
+
 **Model** — the model identifier a request ran against. Subject to *canonicalization*
 (lowercasing, stripping a `(reasoning-tier)` suffix, stripping a trailing `-YYYYMMDD`)
 and then to optional **Model Alias** folding.

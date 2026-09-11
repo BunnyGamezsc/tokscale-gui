@@ -131,3 +131,18 @@ export const setCustomPricing = (model: string, rates: Rates) =>
 
 export const clearCustomPricing = (model: string) =>
   invoke<void>("clear_custom_pricing", { model });
+
+/** Where one vendor CLI was found. `onPath` means a bare-name spawn would have
+ *  worked; `offPath` means it is installed somewhere this process's PATH does
+ *  not name, which is the app's problem rather than the user's; `missing` means
+ *  it is not installed, which is the user's. See ADR 0006. */
+export interface VendorCli {
+  name: string;
+  state: "onPath" | "offPath" | "missing";
+  path: string | null;
+}
+
+/** What the app would resolve for each vendor CLI, in the environment it was
+ *  launched in. A `read_dir` and some dozens of `stat`s, so it needs no Snapshot
+ *  and no scan, but it runs on `spawn_blocking` like everything else. */
+export const vendorClis = () => invoke<VendorCli[]>("vendor_clis");

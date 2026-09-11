@@ -108,7 +108,7 @@ fn parse_group_by(s: &str) -> Result<GroupBy, String> {
 /// Runs blocking work off the async runtime, and gives it a runtime to await
 /// core's `async fn`s on. Both halves are needed: core's entry points are async
 /// but do their work synchronously on the calling thread.
-async fn blocking<T, F>(f: F) -> Result<T, String>
+pub(crate) async fn blocking<T, F>(f: F) -> Result<T, String>
 where
     F: FnOnce() -> Result<T, String> + Send + 'static,
     T: Send + 'static,

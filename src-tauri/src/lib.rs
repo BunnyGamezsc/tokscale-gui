@@ -5,7 +5,9 @@
 //! The command surface designed by ticket 09 now lives in `commands`:
 //!
 //! - Five commands, all `async` and all dispatched onto `spawn_blocking`:
-//!   `scan`, `model_report`, `graph_report`, `clients`, `unpriced`.
+//!   `scan`, `model_report`, `graph_report`, `clients`, `unpriced`. Later
+//!   tickets added `client_catalog` (#28), the three `pricing` commands, and
+//!   `vendor_clis` (#23); the rule they all still follow is the one above.
 //! - `scan` parses once into a snapshot held in `tauri::State`; the report
 //!   commands re-aggregate from that snapshot rather than rescanning.
 //! - Progress is a `scan:progress` Tauri event, emitted around the discovery
@@ -31,6 +33,7 @@ mod commands;
 mod dto;
 mod pricing;
 mod settings;
+mod vendor;
 
 /// How long the backend waits for the frontend to show the window itself.
 /// Comfortably longer than a cold webview start, short enough that a user who
@@ -67,6 +70,7 @@ pub fn run() {
             pricing::custom_pricing,
             pricing::set_custom_pricing,
             pricing::clear_custom_pricing,
+            vendor::vendor_clis,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -92,20 +92,23 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 
 - Upstream has **no OAuth loopback**. Its own login is a device-code poll; for
   Claude/Cursor/Grok/Kimi it is a *credential reader*. Do not build an OAuth client.
-- Keychain access stays a `/usr/bin/security` subprocess. An in-process API would break
-  access to other apps' items and prompt on every refresh.
+- Keychain access stays a `security` subprocess. An in-process API would break access to
+  other apps' items and prompt on every refresh. It is spawned as a bare name, not as
+  `/usr/bin/security` as this line first claimed — #23 checked, and it resolves anyway
+  because `/usr/bin` is on launchd's default PATH. The six *vendor* CLIs do not; ADR 0006.
 
 ## Built
 
 Overview, Models, Daily, Stats and Pricing views. Scan/report command surface. Design system
 and theming. Contribution graph. Manual pricing overrides. The Report Filter in the window
 chrome, shared across Views. The keyboard surface and its Shortcuts sheet. The cold
-first-run experience. The `scanner` half of `settings.json`, read-only.
+first-run experience. The `scanner` half of `settings.json`, read-only. Vendor CLI resolution
+and the sheet that reports it.
 
 ## Open
 
 **All of the below is specced in [#20](https://github.com/BunnyGamezsc/tokscale-gui/issues/20)**
-and sliced into tickets **#21–#31**, plus **#32** from #27's decision. Start with #22 or #23 — those have no blockers.
+and sliced into tickets **#21–#31**, plus **#32** from #27's decision. Start with #22 — it has no blockers.
 The list here stays as the plain-language index.
 
 Roughly in the order they bite.
@@ -205,10 +208,38 @@ Roughly in the order they bite.
      and the Shortcuts sheet's `R` row both carry the cost, in words rather than a confirm
      dialog — ADR 0004's posture, since a rescan is slow rather than destructive.
 
-6. **Vendor CLI resolution.** A `.app` launched from Finder inherits launchd's minimal
-   environment, not the user's shell PATH. tokscale shells out to `codex`, `grok`, `gh`,
-   `claude`, `kiro` — none of which are on that PATH for Homebrew, nvm, bun, mise or asdf
-   installs. Blocks P3 sync and auth. Rated a certainty, not a risk.
+6. ~~**Vendor CLI resolution.**~~ Settled by #23 and written up in ADR 0006. The hazard was
+   real and is now measured rather than predicted: `launchctl getenv PATH` is unset, so a
+   Finder-launched build gets `/usr/bin:/bin:/usr/sbin:/sbin` and resolved zero of the six.
+
+   - **Six vendor CLIs, not five.** The list above was wrong twice: the binary is
+     `kiro-cli`, not `kiro`, and `gemini` was missing. Counted from the fork's call sites:
+     `codex` (5 sites), `gh` (3), `kiro-cli` (2), `gemini` (2), `claude` (2), `grok` (1).
+   - **The system binaries were never part of it.** `security`, `open` and `crontab` are
+     spawned as bare names too — the **P3 groundwork** line above saying keychain access "stays
+     a `/usr/bin/security` subprocess" describes the intent, not the code — but `/usr/bin` is
+     on launchd's default PATH, so they resolve either way.
+   - **`resolve` is pure and takes its candidate directories as an argument**, so the three
+     cases are tested against temp directories rather than a machine. `path_dirs()` and
+     `extra_dirs()` are the impure half, the shape `settings.rs` uses.
+   - **nvm is the only entry that is not a literal.** It has no shims, so
+     `~/.nvm/versions/node/*/bin` is enumerated newest-version-first and first-match picks
+     the newest version that has the binary. `~/.nvm/alias/default` is not read: it holds an
+     alias name as often as a version.
+   - **Candidate order mirrors how a shell builds PATH**, and it is load-bearing. This
+     machine has `codex` and `gemini` installed *twice* each; a version-manager-last order
+     made the packaged build resolve the other copy. Version managers prepend, package
+     managers append, and the list now says so.
+   - **Measured on the packaged `.app`, not assumed.** Finder-launched it gets
+     `PATH=/usr/bin:/bin:/usr/sbin:/sbin` against 50 directories from a terminal, and both
+     resolve the same six paths. `open(1)` from a shell is not a substitute — it passes the
+     caller's environment and hides the bug.
+   - **Three outcomes, in the type.** `OnPath`, `OffPath` and `NotInstalled` — "not
+     installed" is fixed by the user and "off this PATH" by the app, so a
+     `Result<PathBuf, String>` would collapse the distinction the ticket exists to make.
+   - **It has a caller.** A `vendor_clis` command behind a **Vendor CLIs** sheet in the
+     sidebar footer, because the packaged-build criterion cannot be checked unless the
+     packaged app says what it resolved. A resolver, not a sync — P3 is still P3.
 
 7. **Rust toolchain floor.** `rust-version` in `src-tauri/Cargo.toml` says `1.77.2`, which is
    untrue. The original 1.92 floor came from `specta`, which was dropped, so the real floor is
@@ -221,4 +252,5 @@ Roughly in the order they bite.
 settings screen, `gui.json` persistence, interval refresh. Shape depends on how P1 lands.
 
 **P3** — auth for Claude/Codex/Cursor/Grok/Kimi, `cursor`/`antigravity`/`trae` sync, Codex
-multi-account. Blocked on (6).
+multi-account. No longer blocked on (6); its spawn path must use the `PathBuf` `vendor::resolve`
+returns rather than a bare name.
