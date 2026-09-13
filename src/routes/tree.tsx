@@ -10,6 +10,7 @@ import {
 import { OverviewView } from "@/views/overview";
 import { ModelsView } from "@/views/models";
 import { DailyView } from "@/views/daily";
+import { HourlyView } from "@/views/hourly";
 import { StatsView } from "@/views/stats";
 import { PricingView } from "@/views/pricing";
 import { FilterBar } from "@/components/filter-bar";
@@ -18,12 +19,13 @@ import { Modal } from "@/components/modal";
 import { useRefresh } from "@/lib/use-scan";
 import * as api from "@/lib/api";
 
-/** Sidebar destinations. P1 ships Overview, Models, Daily and Stats; the rest
- *  arrive in P2. Order mirrors upstream tokscale's tab order. */
+/** Sidebar destinations, and the `⌘`-digit each one answers to. Order mirrors
+ *  upstream tokscale's tab order. */
 const NAV = [
   { path: "/", label: "Overview", component: OverviewView },
   { path: "/models", label: "Models", component: ModelsView },
   { path: "/daily", label: "Daily", component: DailyView },
+  { path: "/hourly", label: "Hourly", component: HourlyView },
   { path: "/stats", label: "Stats", component: StatsView },
   { path: "/pricing", label: "Pricing", component: PricingView },
 ] as const;

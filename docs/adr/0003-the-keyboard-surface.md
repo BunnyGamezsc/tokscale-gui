@@ -53,6 +53,7 @@ binding, one deviation, stated here rather than discovered.
 | Kept | What it does | Why |
 | --- | --- | --- |
 | `⌘1`–`⌘5` | Go to Overview, Models, Daily, Stats, Pricing | Upstream's tab cycling, in the shape macOS already uses for tabs. A modifier, so it cannot collide with the graph or with a text field. |
+| `⌘4` Hourly, `⌘1`–`⌘6` (#36) | Hourly takes `⌘4` between Daily and Stats; Stats moves to `⌘5`, Pricing to `⌘6` | Upstream's tab order puts Hourly after Daily. The resolver already answered `⌘1`–`⌘9` and the shell bounds-checks against `NAV`, so this was one row in `NAV` and no change to `keys.ts`. |
 | `R` | Refresh | Upstream's `r`. The one action with no visible control outside Overview. Shift is not checked: the sheet says `R`, and Shift+R meaning nothing would make the sheet a lie. |
 | `?` | Shortcuts sheet | New. There is no TUI equivalent; a terminal has a footer hint line. |
 | `Enter` / `Space` | Activate what has focus | Upstream's `Enter` opens the selected Daily/Stats detail. The platform's, once the thing is a `<button>`. |
@@ -76,8 +77,8 @@ Rejected, with the reason each was rejected:
 | `e` export JSON | No export in P1. It needs a save panel, not a key. |
 | `s` client picker | The Report Filter's Picker **is** that control, visible in the chrome. It is also report-time, where upstream's `s` is scan-time; naming those two things apart is roadmap item 5 and not settled. |
 | `g` group-by picker | Models' Group-By tabs are that control, visible and already keyboard-reachable. |
-| `h` chart granularity | Hourly is P2. There is one granularity. |
-| `v` hourly view mode | Hourly is P2 and does not exist. |
+| `h` chart granularity | Hourly is its own View (#36), reached by `⌘4`. There is still one granularity per View. |
+| `v` hourly view mode | Hourly's Table/Profile toggle is a visible tab control, already keyboard-reachable. Same reason as `g`. (Re-checked when #36 built Hourly.) |
 | `a`, `m`, `x` (Usage) | Usage is P2/P3 and does not exist. |
 | `w` worktree rollup | `WorktreeRollup` is not exposed by P1's Group-By set. |
 | `Backspace` close detail | `Esc` is unambiguous; `Backspace` is the browser's own back-gesture territory. |

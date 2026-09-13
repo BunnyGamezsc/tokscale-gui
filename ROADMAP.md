@@ -164,7 +164,7 @@ Roughly in the order they bite.
 4. ~~**Keyboard surface.**~~ Settled by #31 and written up in ADR 0003, which carries the
    per-binding table. In short:
 
-   - **No hotkey library**, and the count is the argument: seven bindings — `⌘1`–`⌘5`, `R`
+   - **No hotkey library**, and the count is the argument: seven bindings — `⌘1`–`⌘5` (`⌘6` since #36), `R`
      for Refresh, `?` for the Shortcuts sheet — are one `keydown` listener on the window
      and one pure resolver in `src/lib/keys.ts`. Reopen it on a count, not a feeling.
    - **`event.code`, not `event.key`.** Upstream spends 236 lines in `tui/keymap.rs`
@@ -264,8 +264,10 @@ when it was specced.
 P2 needs only `tokscale-core`, and its tickets can run in any order. P3 opens the dependency
 on the fork's `tokscale-cli` library target once, in #39, and builds on it.
 
-1. **Hourly View (#36).** Hours, with a table/profile toggle. Decide between a Snapshot fold
-   and core's `get_hourly_report`, and which zone an hour is in, so an hour sums to Daily's day.
+1. ~~**Hourly View (#36).**~~ Built. It folds the held Snapshot in `hourly_report`, not
+   core's `get_hourly_report`, which parses again. A slot's day is the message's `date`, and
+   its hour comes from `timestamp` in the Bucket Timezone. Usage with no usable time is
+   *untimed*: it counts in its day but stays out of the profile. `⌘1`–`⌘6`.
 2. **Agents View (#37).** Settle what an agent is first: `CONTEXT.md` says "by client", but
    the TUI's `AgentUsage` groups by an `agent` string.
 3. **Settings screen (#38).** `gui.json`, appearance, interval refresh and the hidden Minutely

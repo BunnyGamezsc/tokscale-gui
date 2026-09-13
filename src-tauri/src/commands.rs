@@ -14,11 +14,11 @@ use std::time::Instant;
 use tokscale_core::{
     aggregate_model_usage_entries_with_rollup, filter_messages_for_report,
     generate_local_graph_report, model_report_token_totals,
-    parse_local_unified_messages_with_pricing, pricing::PricingService, ClientId, GroupBy,
-    LocalParseOptions, ReportOptions, UnifiedMessage, WorktreeRollup,
+    parse_local_unified_messages_with_pricing, pricing::PricingService, BucketTimezone, ClientId,
+    GroupBy, LocalParseOptions, ReportOptions, UnifiedMessage, WorktreeRollup,
 };
 
-use crate::dto::{Client, Day, Entry, Report, ScanSummary, Unpriced};
+use crate::dto::{Client, Day, Entry, HourSlot, HourlyReport, Report, ScanSummary, Unpriced};
 
 /// The Snapshot: the corpus of Unified Messages produced by one Scan, held for
 /// reports to be aggregated from. Replaced only by another Scan; it does not
@@ -213,6 +213,84 @@ fn report_of(
         total_output,
         total_cache_read,
         total_messages,
+        elapsed_ms: started.elapsed().as_millis() as u32,
+    }
+}
+
+/// Usage by hour, folded from the held Snapshot.
+///
+/// Not core's `get_hourly_report`, which puts its own client list together and
+/// parses again. Its fold is not private the way `graph_report`'s is, and the
+/// Unified Message already carries `timestamp`, so this costs what
+/// `model_report` costs (#36).
+#[tauri::command]
+pub async fn hourly_report(
+    state: tauri::State<'_, Snapshot>,
+    filter: Option<Filter>,
+) -> Result<HourlyReport, String> {
+    let filter = filter.unwrap_or_default();
+    let started = Instant::now();
+    let messages = held(&state)?;
+    blocking(move || {
+        let zone = BucketTimezone::from_scanner_settings(&crate::settings::scanner());
+        Ok(hourly_of(messages, &filter, &zone, started))
+    })
+    .await
+}
+
+/// The hour of day a message belongs to, in the zone that produced its `date`.
+///
+/// **The day is never derived again.** `date` is what Daily folds on, so a slot
+/// keyed on it sums to Daily's day by construction. Only the hour is read off
+/// `timestamp`, and only when that instant falls on `date` in `zone`. Otherwise
+/// the message is untimed: `timestamp <= 0` is the parsers' "no usable time"
+/// marker, and an hour on a different day would contradict the day it counts in.
+/// Core writes `date + "00:00"` instead, which a profile draws as a midnight spike.
+fn hour_of(m: &UnifiedMessage, zone: &BucketTimezone) -> Option<u8> {
+    if m.timestamp <= 0 {
+        return None;
+    }
+    let key = zone.hour_key(m.timestamp)?; // "YYYY-MM-DD HH:00"
+    let (day, hour) = key.split_once(' ')?;
+    if day != m.date {
+        return None;
+    }
+    hour.get(..2)?.parse().ok()
+}
+
+fn hourly_of(
+    messages: Vec<UnifiedMessage>,
+    filter: &Filter,
+    zone: &BucketTimezone,
+    started: Instant,
+) -> HourlyReport {
+    let options = filter.report_options(GroupBy::Model);
+    let filtered = filter_messages_for_report(filter.narrow_clients(messages), &options);
+
+    // `None` sorts before `Some(0)`, so the untimed slot opens its day.
+    let mut slots: std::collections::BTreeMap<(String, Option<u8>), HourSlot> = Default::default();
+    for m in &filtered {
+        let hour = hour_of(m, zone);
+        let slot = slots
+            .entry((m.date.clone(), hour))
+            .or_insert_with(|| HourSlot {
+                date: m.date.clone(),
+                hour,
+                tokens: 0,
+                message_count: 0,
+                cost: 0.0,
+            });
+        slot.tokens = slot.tokens.saturating_add(m.tokens.total());
+        // Clamped as Daily's `DayAccumulator` clamps it, so the two agree.
+        slot.message_count = slot.message_count.saturating_add(m.message_count.max(0));
+        slot.cost += m.cost;
+    }
+    let slots: Vec<HourSlot> = slots.into_values().collect();
+
+    HourlyReport {
+        total_messages: slots.iter().map(|s| s.message_count).sum(),
+        total_cost: slots.iter().map(|s| s.cost).sum(),
+        slots,
         elapsed_ms: started.elapsed().as_millis() as u32,
     }
 }
@@ -913,6 +991,111 @@ mod tests {
                 ..Default::default()
             },
         );
+    }
+
+    // ---- Ticket 36: Hourly ----
+
+    /// Seoul has no DST and sits nine hours off UTC, so its midnight is 15:00
+    /// the previous UTC day: an hour computed in the wrong zone lands on the
+    /// wrong side of it.
+    fn seoul() -> BucketTimezone {
+        BucketTimezone::from_pinned_name(Some("Asia/Seoul"))
+    }
+
+    /// 2026-08-01 23:59:59 in Seoul.
+    const BEFORE_MIDNIGHT: i64 = 1_785_596_399_000;
+
+    /// A message at `timestamp`, dated the way core's rebucket pass dates it:
+    /// the day that instant falls on in the Bucket Timezone.
+    fn at(client: &str, timestamp: i64, cost: f64) -> UnifiedMessage {
+        let mut m = msg(client, "sonnet", &seoul().day_key(timestamp), cost);
+        m.timestamp = timestamp;
+        m
+    }
+
+    fn midnight_corpus() -> Vec<UnifiedMessage> {
+        let mut untimed = msg("claude-code", "sonnet", "2026-08-02", 16.0);
+        untimed.timestamp = 0;
+        vec![
+            at("claude-code", BEFORE_MIDNIGHT - 12 * 3_600_000, 1.0), // 08-01 11:59
+            at("claude-code", BEFORE_MIDNIGHT, 2.0),                  // 08-01 23:59:59
+            at("codex", BEFORE_MIDNIGHT + 2_000, 4.0),                // 08-02 00:00:01
+            at("claude-code", BEFORE_MIDNIGHT + 1_800_000, 8.0),      // 08-02 00:30
+            untimed,
+        ]
+    }
+
+    /// The agreement #36 asks for: **each day's hours sum to Daily's day.**
+    /// Daily is `aggregate_by_date`'s fold (`graph_report` runs the same
+    /// `DailyFold`), keyed on `date`. The messages sit a second either side of
+    /// Seoul's midnight, which is the afternoon in UTC, so this also pins which
+    /// zone the hour is read in.
+    #[test]
+    fn each_days_hours_sum_to_dailys_day_across_midnight() {
+        let corpus = midnight_corpus();
+        let report = hourly_of(corpus.clone(), &Filter::default(), &seoul(), Instant::now());
+        let daily = tokscale_core::aggregate_by_date(corpus);
+        assert_eq!(daily.len(), 2);
+
+        for day in &daily {
+            let slots: Vec<_> = report.slots.iter().filter(|s| s.date == day.date).collect();
+            let cost: f64 = slots.iter().map(|s| s.cost).sum();
+            let tokens: i64 = slots.iter().map(|s| s.tokens).sum();
+            let messages: i32 = slots.iter().map(|s| s.message_count).sum();
+            assert!((cost - day.totals.cost).abs() < 1e-9, "{}: {cost} vs {}", day.date, day.totals.cost);
+            assert_eq!(tokens, day.totals.tokens, "{}: tokens", day.date);
+            assert_eq!(messages, day.totals.messages, "{}: messages", day.date);
+        }
+
+        let hours = |date: &str| -> Vec<Option<u8>> {
+            report.slots.iter().filter(|s| s.date == date).map(|s| s.hour).collect()
+        };
+        // In UTC these would be 02, 14, 15 and 15.
+        assert_eq!(hours("2026-08-01"), vec![Some(11), Some(23)]);
+        assert_eq!(hours("2026-08-02"), vec![None, Some(0)]);
+        assert!((report.total_cost - 31.0).abs() < 1e-9);
+        assert_eq!(report.total_messages, 5);
+    }
+
+    /// A message with no usable time is **untimed**, not 00:00. Core's own fold
+    /// writes `date + "00:00"`, which draws a midnight spike in a profile. It
+    /// still counts in its day, so the day keeps summing to Daily; it just has
+    /// no hour. The same holds for a timestamp whose Bucket Timezone day is not
+    /// the message's `date`: an hour there would contradict the day it counts in.
+    #[test]
+    fn a_message_without_a_usable_time_counts_in_its_day_with_no_hour() {
+        let mut untimed = msg("claude-code", "sonnet", "2026-08-02", 1.0);
+        untimed.timestamp = 0;
+        let mut disagreeing = at("claude-code", BEFORE_MIDNIGHT, 2.0);
+        disagreeing.date = "2026-08-02".into(); // Seoul says 08-01
+
+        let report = hourly_of(vec![untimed, disagreeing], &Filter::default(), &seoul(), Instant::now());
+        assert_eq!(report.slots.len(), 1, "one untimed slot, not a 00:00 one");
+        let slot = &report.slots[0];
+        assert_eq!((slot.date.as_str(), slot.hour), ("2026-08-02", None));
+        assert_eq!(slot.message_count, 2);
+        assert!((slot.cost - 3.0).abs() < 1e-9);
+    }
+
+    /// Hourly narrows on Overview's and Models' terms: `narrow_clients`, then
+    /// core's date predicate, over the held Snapshot.
+    #[test]
+    fn hourly_follows_the_report_filter() {
+        let codex = Filter {
+            clients: Some(vec!["codex".into()]),
+            ..Default::default()
+        };
+        let report = hourly_of(midnight_corpus(), &codex, &seoul(), Instant::now());
+        assert_eq!(report.slots.len(), 1);
+        assert!((report.total_cost - 4.0).abs() < 1e-9);
+
+        let first_day = Filter {
+            until: Some("2026-08-01".into()),
+            ..Default::default()
+        };
+        let report = hourly_of(midnight_corpus(), &first_day, &seoul(), Instant::now());
+        assert!(report.slots.iter().all(|s| s.date == "2026-08-01"));
+        assert!((report.total_cost - 3.0).abs() < 1e-9);
     }
 
     // ---- Ticket 25: Ramp bucketing ----

@@ -133,6 +133,13 @@ that disagreement is expected rather than a bug.
 **View** — one top-level destination. Upstream has eight: Overview, Usage, Models,
 Daily, Hourly, Stats, Agents, and a hidden Minutely.
 
+**Hour slot** — one hour of one day on the Hourly View. Its day is the message's own
+`date`, the key Daily folds on, so a day's slots sum to Daily's day. Its hour is read from
+`timestamp` in the Bucket Timezone. **Untimed** usage has no usable timestamp, or one that
+falls on a different day than its `date`. It counts in its day but has no hour, so the
+hour-of-day **Profile** leaves it out and says how much it left out. Core's own hourly fold
+files that usage under `00:00` instead, which draws a false spike at midnight (#36).
+
 **Agents** — upstream's name for the view breaking usage down by client. Retained
 despite the tension with **Client**, because renaming it would diverge from tokscale.
 

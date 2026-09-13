@@ -106,6 +106,29 @@ pub struct Day {
     pub tokens: i64,
 }
 
+/// One hour of one day. `date` is the message's own Bucket Timezone day, the
+/// key Daily folds on; `hour` is 0-23 in that zone, or `None` for usage with no
+/// usable time (#36), which counts in its day but has no hour to draw.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HourSlot {
+    pub date: String,
+    pub hour: Option<u8>,
+    pub tokens: i64,
+    pub message_count: i32,
+    pub cost: f64,
+}
+
+/// Hour slots in chronological order, untimed first within a day.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HourlyReport {
+    pub slots: Vec<HourSlot>,
+    pub total_messages: i32,
+    pub total_cost: f64,
+    pub elapsed_ms: u32,
+}
+
 /// A Client that produced usage, with how much.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

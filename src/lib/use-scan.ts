@@ -220,6 +220,19 @@ export function useGraph(ready: boolean) {
   });
 }
 
+export function useHourly(ready: boolean) {
+  const filter = useFilter();
+  return useQuery({
+    queryKey: ["hourly_report", filter],
+    queryFn: () => api.hourlyReport(asArg(filter)),
+    enabled: ready,
+    staleTime: Infinity,
+    // Same as the graph (#32): a Filter edit keeps the old hours on screen,
+    // dimmed, instead of emptying the View.
+    placeholderData: keepPreviousData,
+  });
+}
+
 export function useClients(ready: boolean) {
   const filter = useFilter();
   return useQuery({

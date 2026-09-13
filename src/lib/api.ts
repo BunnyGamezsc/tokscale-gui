@@ -67,6 +67,25 @@ export interface Day {
   tokens: number;
 }
 
+/** One hour of one day. `date` is Daily's day key; `hour` is 0-23 in the Bucket
+ *  Timezone, or `null` for usage with no usable time, which counts in its day
+ *  but has no hour (#36). */
+export interface HourSlot {
+  date: string;
+  hour: number | null;
+  tokens: number;
+  messageCount: number;
+  cost: number;
+}
+
+/** Hour slots in chronological order, untimed first within a day. */
+export interface HourlyReport {
+  slots: HourSlot[];
+  totalMessages: number;
+  totalCost: number;
+  elapsedMs: number;
+}
+
 export interface Client {
   id: string;
   messages: number;
@@ -85,6 +104,11 @@ export const scan = (filter?: Filter, force = false) =>
 /** Re-aggregates the held Snapshot. 41-100ms, so a Group-By switch is instant. */
 export const modelReport = (groupBy: GroupBy, filter?: Filter) =>
   invoke<Report>("model_report", { groupBy, filter });
+
+/** Usage by hour, folded from the held Snapshot, so it costs what `modelReport`
+ *  costs rather than a parse. */
+export const hourlyReport = (filter?: Filter) =>
+  invoke<HourlyReport>("hourly_report", { filter });
 
 /** Re-enters the parse rather than reading the Snapshot — the one asymmetry in
  *  the surface. 0.28-0.76 s after a Scan (#27), invalidated only by a scan. */
