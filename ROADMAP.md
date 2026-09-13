@@ -255,11 +255,30 @@ Roughly in the order they bite.
      public P1 entry points on origin: `lib.1` predated them, so only the `[patch]` was
      building.
 
-## Not yet specified
+## Next: P2 and P3
 
-**P2 views** — Hourly (table vs profile toggle), Agents, Usage/quota cards, hidden Minutely,
-settings screen, `gui.json` persistence, interval refresh. Shape depends on how P1 lands.
+**Specced in [#35](https://github.com/BunnyGamezsc/tokscale-gui/issues/35)** as one roadmap
+and sliced into **#36–#41**. P1 shipped as `v1.0.0-pre`; nothing below had been started
+when it was specced.
 
-**P3** — auth for Claude/Codex/Cursor/Grok/Kimi, `cursor`/`antigravity`/`trae` sync, Codex
-multi-account. No longer blocked on (6); its spawn path must use the `PathBuf` `vendor::resolve`
-returns rather than a bare name.
+P2 needs only `tokscale-core`, and its tickets can run in any order. P3 opens the dependency
+on the fork's `tokscale-cli` library target once, in #39, and builds on it.
+
+1. **Hourly View (#36).** Hours, with a table/profile toggle. Decide between a Snapshot fold
+   and core's `get_hourly_report`, and which zone an hour is in, so an hour sums to Daily's day.
+2. **Agents View (#37).** Settle what an agent is first: `CONTEXT.md` says "by client", but
+   the TUI's `AgentUsage` groups by an `agent` string.
+3. **Settings screen (#38).** `gui.json`, appearance, interval refresh and the hidden Minutely
+   View. Measure a warm Scan before choosing a refresh default. The CLI's `settings.json`
+   stays read-only.
+4. **Usage View (#39).** Vendor-reported quota cards from `fetch_all_report_with_intent`.
+   Adds `tokscale-cli` as a dependency and records how the GUI calls it in ADR 0007.
+5. **Provider sync (#40).** Cursor, Antigravity and Trae, so their usage reaches the
+   Snapshot. Blocked by #39.
+6. **Accounts (#41).** Cursor and Codex multi-account. `codex app-server` spawns through
+   `vendor::resolve`. Blocked by #39 and #40.
+
+**The old P3 line merged two things.** `tokscale-cli/src/auth.rs` is the *tokscale.ai*
+account login used for submit, not provider auth. Provider credentials are read from what
+the vendors' own tools stored. Out of scope in #35, as are the TUI's Monthly and Sessions
+tabs.
