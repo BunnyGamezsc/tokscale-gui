@@ -26,13 +26,13 @@ Requires macOS 10.15 or later.
 
 ## Features
 
-- **Views:** Overview, Models, Daily, Stats and Pricing
+- **Views:** Overview, Models, Daily, Hourly, Stats, Agents and Pricing
 - **Report Filter:** narrow by client and date range, shared across all views
 - **Contribution Graph:** one year at a time, with a year picker and full keyboard access
 - **Manual pricing:** set rates for models that have usage but no price
 - **Cold first run:** the first scan reads every client's transcripts and takes about 21–40 s;
   later scans are much faster
-- **Keyboard:** ⌘1–⌘6 switch views, `R` refreshes, `?` lists the shortcuts
+- **Keyboard:** ⌘1–⌘7 switch views, `R` refreshes, `?` lists the shortcuts
 - **Vendor CLI resolution:** finds CLIs installed outside the default `PATH` (Homebrew, nvm,
   `~/.local/bin` and so on), including when the app is launched from Finder rather than a shell
 

@@ -233,6 +233,16 @@ export function useHourly(ready: boolean) {
   });
 }
 
+export function useAgents(ready: boolean) {
+  const filter = useFilter();
+  return useQuery({
+    queryKey: ["agents_report", filter],
+    queryFn: () => api.agentsReport(asArg(filter)),
+    enabled: ready,
+    staleTime: Infinity,
+  });
+}
+
 export function useClients(ready: boolean) {
   const filter = useFilter();
   return useQuery({

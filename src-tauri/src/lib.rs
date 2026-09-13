@@ -63,6 +63,7 @@ pub fn run() {
             commands::model_report,
             commands::graph_report,
             commands::hourly_report,
+            commands::agents_report,
             commands::clients,
             commands::client_catalog,
             commands::unpriced,

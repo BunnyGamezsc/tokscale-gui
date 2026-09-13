@@ -18,7 +18,10 @@ use tokscale_core::{
     GroupBy, LocalParseOptions, ReportOptions, UnifiedMessage, WorktreeRollup,
 };
 
-use crate::dto::{Client, Day, Entry, HourSlot, HourlyReport, Report, ScanSummary, Unpriced};
+use crate::dto::{
+    AgentRow, AgentsReport, Client, Day, Entry, HourSlot, HourlyReport, Report, ScanSummary,
+    Unpriced,
+};
 
 /// The Snapshot: the corpus of Unified Messages produced by one Scan, held for
 /// reports to be aggregated from. Replaced only by another Scan; it does not
@@ -291,6 +294,96 @@ fn hourly_of(
         total_messages: slots.iter().map(|s| s.message_count).sum(),
         total_cost: slots.iter().map(|s| s.cost).sum(),
         slots,
+        elapsed_ms: started.elapsed().as_millis() as u32,
+    }
+}
+
+/// Usage by agent, folded from the held Snapshot.
+///
+/// The TUI builds this inside `tui::data`'s aggregation, in `tokscale-cli`,
+/// which the GUI does not depend on. The Unified Message already carries
+/// `agent`, so the grouping rule is ported here rather than linked (#37).
+#[tauri::command]
+pub async fn agents_report(
+    state: tauri::State<'_, Snapshot>,
+    filter: Option<Filter>,
+) -> Result<AgentsReport, String> {
+    let filter = filter.unwrap_or_default();
+    let started = Instant::now();
+    let messages = held(&state)?;
+    blocking(move || Ok(agents_of(messages, &filter, started))).await
+}
+
+/// The agent a message is grouped under, spelled the way the TUI spells it.
+///
+/// Normalizing matters: without it `omo` and `Sisyphus` are two rows whose
+/// totals still add up, which would hide the split. The per-client choice of
+/// normalizer mirrors `tui/data/mod.rs`. A name that normalizes to nothing is
+/// no agent, not an agent called "".
+fn agent_of(m: &UnifiedMessage) -> Option<String> {
+    use tokscale_core::sessions::{
+        normalize_agent_name, normalize_copilot_agent_name, normalize_opencode_agent_name,
+    };
+    let raw = m.agent.as_deref()?;
+    let name = match m.client.as_str() {
+        "opencode" => normalize_opencode_agent_name(raw),
+        "copilot" => normalize_copilot_agent_name(raw),
+        _ => normalize_agent_name(raw),
+    };
+    (!name.trim().is_empty()).then_some(name)
+}
+
+fn agents_of(messages: Vec<UnifiedMessage>, filter: &Filter, started: Instant) -> AgentsReport {
+    let options = filter.report_options(GroupBy::Model);
+    let filtered = filter_messages_for_report(filter.narrow_clients(messages), &options);
+
+    // The TUI skips messages with no agent. Here they are a row of their own
+    // (`agent: None`), so the View's total is Overview's.
+    let mut rows: std::collections::BTreeMap<Option<String>, AgentRow> = Default::default();
+    for m in &filtered {
+        let agent = agent_of(m);
+        let row = rows.entry(agent.clone()).or_insert_with(|| AgentRow {
+            agent,
+            clients: Vec::new(),
+            input: 0,
+            output: 0,
+            cache_read: 0,
+            cache_write: 0,
+            message_count: 0,
+            cost: 0.0,
+        });
+        if !row.clients.contains(&m.client) {
+            row.clients.push(m.client.clone());
+        }
+        // Unclamped, as core's model fold sums them, so the totals are Overview's.
+        row.input = row.input.saturating_add(m.tokens.input);
+        row.output = row.output.saturating_add(m.tokens.output);
+        row.cache_read = row.cache_read.saturating_add(m.tokens.cache_read);
+        row.cache_write = row.cache_write.saturating_add(m.tokens.cache_write);
+        row.message_count = row.message_count.saturating_add(m.message_count);
+        row.cost += m.cost;
+    }
+
+    let mut agents: Vec<AgentRow> = rows.into_values().collect();
+    for a in &mut agents {
+        a.clients.sort();
+    }
+    // The TUI's order: cost, then tokens, then name.
+    let tokens = |a: &AgentRow| a.input + a.output + a.cache_read + a.cache_write;
+    agents.sort_by(|a, b| {
+        b.cost
+            .total_cmp(&a.cost)
+            .then_with(|| tokens(b).cmp(&tokens(a)))
+            .then_with(|| a.agent.cmp(&b.agent))
+    });
+
+    AgentsReport {
+        total_input: agents.iter().map(|a| a.input).sum(),
+        total_output: agents.iter().map(|a| a.output).sum(),
+        total_cache_read: agents.iter().map(|a| a.cache_read).sum(),
+        total_messages: agents.iter().map(|a| a.message_count).sum(),
+        total_cost: agents.iter().map(|a| a.cost).sum(),
+        agents,
         elapsed_ms: started.elapsed().as_millis() as u32,
     }
 }
@@ -1096,6 +1189,102 @@ mod tests {
         let report = hourly_of(midnight_corpus(), &first_day, &seoul(), Instant::now());
         assert!(report.slots.iter().all(|s| s.date == "2026-08-01"));
         assert!((report.total_cost - 3.0).abs() < 1e-9);
+    }
+
+    // ---- Ticket 37: Agents ----
+
+    fn by(client: &str, agent: Option<&str>, date: &str, cost: f64) -> UnifiedMessage {
+        let mut m = msg(client, "sonnet", date, cost);
+        m.agent = agent.map(str::to_string);
+        m
+    }
+
+    fn agent_corpus() -> Vec<UnifiedMessage> {
+        vec![
+            by("opencode", Some("build"), "2026-08-01", 1.0),
+            by("roocode", Some(" Build "), "2026-08-02", 2.0),
+            by("opencode", Some("omo"), "2026-08-03", 4.0),
+            by("opencode", Some("Sisyphus"), "2026-08-04", 8.0),
+            by("claude-code", None, "2026-08-05", 16.0),
+            by("codex", Some("   "), "2026-09-01", 32.0),
+        ]
+    }
+
+    /// The acceptance test for #37: **Agents' totals are Overview's**, for the
+    /// same corpus and Report Filter, narrowed by client and by date. Overview
+    /// is `model_report`, so this compares against `report_of`.
+    #[test]
+    fn agents_totals_equal_overviews_under_the_same_filter() {
+        let filters = [
+            Filter::default(),
+            Filter {
+                clients: Some(vec!["opencode".into(), "codex".into()]),
+                ..Default::default()
+            },
+            Filter {
+                since: Some("2026-08-02".into()),
+                until: Some("2026-08-31".into()),
+                ..Default::default()
+            },
+        ];
+        for f in &filters {
+            let agents = agents_of(agent_corpus(), f, Instant::now());
+            let overview = report_of(agent_corpus(), &GroupBy::Model, f, Instant::now());
+            assert!((agents.total_cost - overview.total_cost).abs() < 1e-9, "{f:?}");
+            assert_eq!(agents.total_input, overview.total_input, "{f:?}");
+            assert_eq!(agents.total_output, overview.total_output, "{f:?}");
+            assert_eq!(agents.total_cache_read, overview.total_cache_read, "{f:?}");
+            assert_eq!(agents.total_messages, overview.total_messages, "{f:?}");
+        }
+    }
+
+    /// Spellings of one agent are one row, as the TUI normalizes them; a
+    /// message with no agent (or a blank one) is a row of its own, not dropped;
+    /// and each row names the Clients it came from.
+    #[test]
+    fn agents_are_normalized_and_no_agent_is_a_row() {
+        let report = agents_of(agent_corpus(), &Filter::default(), Instant::now());
+        let row = |name: Option<&str>| {
+            report
+                .agents
+                .iter()
+                .find(|a| a.agent.as_deref() == name)
+                .unwrap_or_else(|| panic!("no row for {name:?}: {:?}", report.agents))
+        };
+
+        assert_eq!(report.agents.len(), 3, "{:?}", report.agents);
+        let build = row(Some("Build"));
+        assert_eq!(build.clients, ["opencode", "roocode"]);
+        assert!((build.cost - 3.0).abs() < 1e-9);
+        assert!((row(Some("Sisyphus")).cost - 12.0).abs() < 1e-9);
+
+        let none = row(None);
+        assert_eq!(none.clients, ["claude-code", "codex"]);
+        assert_eq!(none.message_count, 2);
+        assert!((none.cost - 48.0).abs() < 1e-9);
+    }
+
+    /// #37's measurement: how much of the real corpus has no agent. Not a unit
+    /// test; it walks real disk. Run by hand:
+    /// `cargo test --lib -- --ignored --nocapture no_agent_share`
+    #[test]
+    #[ignore]
+    fn no_agent_share() {
+        let snapshot =
+            tauri::async_runtime::block_on(priced_parse(Filter::default().parse_options()))
+                .expect("scan");
+        let report = agents_of(snapshot, &Filter::default(), Instant::now());
+        for a in &report.agents {
+            println!(
+                "{:<30} {:>8} msgs {:>6.1}%  ${:>10.2} {:>6.1}%  [{}]",
+                a.agent.as_deref().unwrap_or("(no agent)"),
+                a.message_count,
+                100.0 * a.message_count as f64 / report.total_messages as f64,
+                a.cost,
+                100.0 * a.cost / report.total_cost,
+                a.clients.join(", "),
+            );
+        }
     }
 
     // ---- Ticket 25: Ramp bucketing ----

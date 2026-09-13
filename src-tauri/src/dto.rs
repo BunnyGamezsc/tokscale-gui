@@ -129,6 +129,35 @@ pub struct HourlyReport {
     pub elapsed_ms: u32,
 }
 
+/// One agent's usage. `agent` is the TUI's normalized name, or `None` for
+/// usage with no recorded agent, which is a row rather than dropped (#37).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRow {
+    pub agent: Option<String>,
+    /// The Clients this agent's usage came from, sorted.
+    pub clients: Vec<String>,
+    pub input: i64,
+    pub output: i64,
+    pub cache_read: i64,
+    pub cache_write: i64,
+    pub message_count: i32,
+    pub cost: f64,
+}
+
+/// Agents by cost, most expensive first. The totals are Overview's.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentsReport {
+    pub agents: Vec<AgentRow>,
+    pub total_input: i64,
+    pub total_output: i64,
+    pub total_cache_read: i64,
+    pub total_messages: i32,
+    pub total_cost: f64,
+    pub elapsed_ms: u32,
+}
+
 /// A Client that produced usage, with how much.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

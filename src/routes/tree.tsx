@@ -13,6 +13,7 @@ import { DailyView } from "@/views/daily";
 import { HourlyView } from "@/views/hourly";
 import { StatsView } from "@/views/stats";
 import { PricingView } from "@/views/pricing";
+import { AgentsView } from "@/views/agents";
 import { FilterBar } from "@/components/filter-bar";
 import { bindings, isTyping, resolve } from "@/lib/keys";
 import { Modal } from "@/components/modal";
@@ -27,6 +28,7 @@ const NAV = [
   { path: "/daily", label: "Daily", component: DailyView },
   { path: "/hourly", label: "Hourly", component: HourlyView },
   { path: "/stats", label: "Stats", component: StatsView },
+  { path: "/agents", label: "Agents", component: AgentsView },
   { path: "/pricing", label: "Pricing", component: PricingView },
 ] as const;
 
