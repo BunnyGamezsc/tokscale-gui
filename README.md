@@ -93,3 +93,7 @@ together. See ADR 0001 and ADR 0002.
 The usage engine is [tokscale](https://github.com/junhoyeo/tokscale), Copyright (c) 2025
 Junho Yeo, used under the MIT License; see `vendor/tokscale/LICENSE`. This app builds on a
 fork of it, [BunnyGamezsc/tokscale](https://github.com/BunnyGamezsc/tokscale).
+
+## License
+
+[MIT](LICENSE).

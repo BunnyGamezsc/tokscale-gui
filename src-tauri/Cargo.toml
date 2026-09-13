@@ -2,6 +2,7 @@
 name = "tokscale-gui"
 version = "1.0.0-pre"
 edition = "2021"
+license = "MIT"
 # Measured, not guessed: `cargo +1.88 check --locked` builds, and 1.88 is the
 # highest `rust-version` any locked dependency declares, so nothing older can. The toolchain actually used is pinned separately in
 # /rust-toolchain.toml.
