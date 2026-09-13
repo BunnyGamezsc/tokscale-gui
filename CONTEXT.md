@@ -128,6 +128,11 @@ says you have consumed against your plan, with reset windows. Not computed by to
 and not reconciled against tokscale's own figures. These two numbers can disagree, and
 that disagreement is expected rather than a bug.
 
+On the tab, a provider is **not set up** when no credentials for it were found, so it was
+never asked; that is information, not an error. A **failed** provider had credentials and
+its fetch went wrong, and it says why. **Stale** cards are the last result on disk, shown
+when no provider could be reached (#39, ADR 0007).
+
 ## Presentation
 
 **View** — one top-level destination. Upstream has eight: Overview, Usage, Models,

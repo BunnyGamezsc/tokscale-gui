@@ -32,6 +32,7 @@ mod dto;
 mod gui;
 mod pricing;
 mod settings;
+mod usage;
 mod vendor;
 
 /// How long the backend waits for the frontend to show the window itself.
@@ -41,6 +42,9 @@ const SHOW_FALLBACK: Duration = Duration::from_millis(1500);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Vendor CLIs the fork spawns resolve through `vendor` (ADR 0006, 0007).
+    tokscale_cli::spawn::set_resolver(vendor::for_spawn);
+
     tauri::Builder::default()
         .setup(|app| {
             let window = app
@@ -73,6 +77,7 @@ pub fn run() {
             pricing::set_custom_pricing,
             pricing::clear_custom_pricing,
             vendor::vendor_clis,
+            usage::quota,
             gui::gui_settings,
             gui::set_gui_settings,
         ])

@@ -24,6 +24,7 @@ import {
 import { StatsView } from "@/views/stats";
 import { PricingView } from "@/views/pricing";
 import { AgentsView } from "@/views/agents";
+import { UsageView } from "@/views/usage";
 import { FilterBar } from "@/components/filter-bar";
 import { bindings, isTyping, resolve } from "@/lib/keys";
 import { Modal } from "@/components/modal";
@@ -34,6 +35,8 @@ import * as api from "@/lib/api";
  *  upstream tokscale's tab order. */
 const NAV = [
   { path: "/", label: "Overview", component: OverviewView },
+  // Needs no Snapshot: quota comes from each provider's API (#39).
+  { path: "/usage", label: "Usage", component: UsageView },
   { path: "/models", label: "Models", component: ModelsView },
   { path: "/daily", label: "Daily", component: DailyView },
   { path: "/hourly", label: "Hourly", component: HourlyView },

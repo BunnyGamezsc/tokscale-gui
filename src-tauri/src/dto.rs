@@ -218,3 +218,46 @@ pub struct VendorCli {
     pub state: &'static str,
     pub path: Option<String>,
 }
+
+/// **Usage (the tab)**: quota as each provider reported it (#39).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Quota {
+    pub cards: Vec<QuotaCard>,
+    /// Providers with no credentials. They were not fetched at all.
+    pub not_set_up: Vec<String>,
+    /// Set when every fetch failed and the cards are the last result on disk:
+    /// when that result was fetched, in Unix seconds.
+    pub stale_since: Option<u64>,
+}
+
+/// One provider account. `state` is `"fresh"`, `"stale"` or `"failed"`. A
+/// failed card has diagnostics and no metrics; diagnostics on a card with
+/// metrics are a problem beside a result that still arrived.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuotaCard {
+    pub provider: String,
+    pub account: Option<String>,
+    pub plan: Option<String>,
+    pub state: &'static str,
+    pub diagnostics: Vec<String>,
+    pub metrics: Vec<QuotaMetric>,
+    pub balance: Option<String>,
+    pub unlimited: bool,
+    pub overage_limit_reached: bool,
+    /// Resets that can be spent early, for a provider that has them.
+    pub reset_credits: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuotaMetric {
+    pub label: String,
+    pub used_percent: f64,
+    pub remaining_percent: f64,
+    /// The provider's own wording of what's left ("12/50 left"), when it has one.
+    pub remaining_label: Option<String>,
+    /// As sent: RFC 3339 from most providers, free text from a few.
+    pub resets_at: Option<String>,
+}
