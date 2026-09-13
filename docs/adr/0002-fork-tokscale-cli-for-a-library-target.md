@@ -85,3 +85,18 @@ change, not new code.
 The `tokscale-cli` library target exists in the fork but is not yet a dependency of the GUI
 crate, which depends on `tokscale-core` alone. It is dormant, not missing: P3 adds the
 dependency when auth and sync are built.
+
+**Amended 2026-09-13** (#39, ADR 0007). `tokscale-cli` is now a dependency of the GUI crate,
+pinned to `gui-v4.15.1-lib.3`. That tag adds three seams to the conflict surface, each
+added only because no function returned the data:
+
+- `commands/usage/mod.rs`: `fetch_all_report_and_unconfigured`, which returns the report
+  plus the providers skipped for lack of credentials. `fetch_all_report_with_intent` is now
+  a wrapper over it, and the private `fetch_all_report_with_codex` returns both.
+- `commands/usage/mod.rs`: `load_cache_any_age`, the subscription cache with its timestamp
+  and no expiry. `load_cache_at` now calls the any-age reader and applies the five minutes.
+- `spawn.rs` (new file, one line in `lib.rs`): a process-wide resolver for vendor CLI
+  spawns, and one call site moved onto it, `Command::new("grok")` in
+  `commands/usage/grok.rs`. With no resolver installed it is `Command::new(name)`.
+
+No feature gate was added; ADR 0007 records the measurement behind that.

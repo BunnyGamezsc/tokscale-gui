@@ -95,6 +95,16 @@ fn path_dirs() -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
+/// What `tokscale_cli::spawn` runs for `name`: the resolved path, or the bare
+/// name when nothing was found, so the spawn fails the way a shell's would.
+/// Installed once, in `run` (ADR 0007).
+pub fn for_spawn(name: &str) -> PathBuf {
+    match resolve(name, &path_dirs(), &extra_dirs()) {
+        Resolution::OnPath(p) | Resolution::OffPath(p) => p,
+        Resolution::NotInstalled => name.into(),
+    }
+}
+
 /// The directories a shell would have added, in the order to try them.
 ///
 /// A flat literal, except for nvm. Homebrew, bun, cargo, volta, deno, pnpm and

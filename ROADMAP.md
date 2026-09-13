@@ -27,9 +27,9 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 **Stack**
 
 - Tauri v2. One binary, no sidecar, no separate CLI.
-- `tokscale-core` as an in-process dependency, pinned to fork tag `gui-v4.15.1-lib.2` and
-  `[patch]`ed to the `vendor/tokscale` submodule (branch `lib-target`) for day-to-day work.
-  Bump both together. See ADR 0001 and 0002.
+- `tokscale-core` and `tokscale-cli` as in-process dependencies, pinned to fork tag
+  `gui-v4.15.1-lib.3` and `[patch]`ed to the `vendor/tokscale` submodule (branch
+  `lib-target`) for day-to-day work. Bump both together. See ADR 0001, 0002 and 0007.
 - React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui. pnpm.
 - TanStack **Router and Query only**. Table, Charts and Hotkeys were considered and never
   installed — Models hand-rolls sorting over 38–198 Entries, and the graph is hand-rolled SVG.
@@ -278,12 +278,18 @@ on the fork's `tokscale-cli` library target once, in #39, and builds on it.
    ~214 ms, so interval refresh keeps the TUI's 60 s default and 30 s–1 h bounds, off by
    default, through `refreshScan`. Minutely is Hourly's fold at a finer key: 3,778 slots
    in 6 ms on the author's corpus. Shift+R stays Refresh.
-4. **Usage View (#39).** Vendor-reported quota cards from `fetch_all_report_with_intent`.
-   Adds `tokscale-cli` as a dependency and records how the GUI calls it in ADR 0007.
+4. ~~**Usage View (#39).**~~ Built, on `⌘2`. `tokscale-cli` is a dependency, ungated: +166
+   crates, +2m20s on a clean release build, +1.9 MB of binary (ADR 0007). Quota comes from
+   `CliReadOnly` with no runtime around it, since `antigravity::has_credentials` builds its
+   own on the calling thread. The fork gained three seams, all listed in ADR 0002: the
+   not-set-up names, an any-age cache read for stale cards, and a spawn resolver that
+   Grok's billing fallback now goes through.
 5. **Provider sync (#40).** Cursor, Antigravity and Trae, so their usage reaches the
-   Snapshot. Blocked by #39.
+   Snapshot. Blocked by #39. `cursor.rs` builds runtimes with `Runtime::new()`; check them
+   under `blocking` the way #39's probe did.
 6. **Accounts (#41).** Cursor and Codex multi-account. `codex app-server` spawns through
-   `vendor::resolve`. Blocked by #39 and #40.
+   `tokscale_cli::spawn`. Under nvm `codex` is a `#!/usr/bin/env node` script, so an
+   absolute path alone won't run it from Finder (ADR 0007). Blocked by #39 and #40.
 
 **The old P3 line merged two things.** `tokscale-cli/src/auth.rs` is the *tokscale.ai*
 account login used for submit, not provider auth. Provider credentials are read from what

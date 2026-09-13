@@ -227,3 +227,39 @@ export interface VendorCli {
  *  launched in. A `read_dir` and some dozens of `stat`s, so it needs no Snapshot
  *  and no scan, but it runs on `spawn_blocking` like everything else. */
 export const vendorClis = () => invoke<VendorCli[]>("vendor_clis");
+
+export interface QuotaMetric {
+  label: string;
+  usedPercent: number;
+  remainingPercent: number;
+  /** The provider's own wording of what's left, when it has one. */
+  remainingLabel: string | null;
+  /** RFC 3339 from most providers, free text from a few. */
+  resetsAt: string | null;
+}
+
+/** One provider account. A failed card has diagnostics and no metrics. */
+export interface QuotaCard {
+  provider: string;
+  account: string | null;
+  plan: string | null;
+  state: "fresh" | "stale" | "failed";
+  diagnostics: string[];
+  metrics: QuotaMetric[];
+  balance: string | null;
+  unlimited: boolean;
+  overageLimitReached: boolean;
+  resetCredits: number | null;
+}
+
+/** **Usage (the tab)**: quota as each provider reported it, never compared with
+ *  tokscale's own usage. `staleSince` (Unix seconds) is set when every fetch
+ *  failed and the cards are the last result on disk. */
+export interface Quota {
+  cards: QuotaCard[];
+  notSetUp: string[];
+  staleSince: number | null;
+}
+
+/** Asks every provider with credentials for its quota. Network-bound, seconds. */
+export const quota = () => invoke<Quota>("quota");
