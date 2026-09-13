@@ -17,10 +17,12 @@ Get the latest build from [Releases](https://github.com/BunnyGamezsc/tokscale-gu
 
 Requires macOS 10.15 or later.
 
-**Builds are unsigned.** macOS blocks the first launch. Right-click the app, choose **Open**,
-then **Open** again. Alternatively, run:
+**Builds are unsigned.** Right-click the app, choose **Open**, then go to **Settings** > **Privacy and Security** and allow the app to be opened. Alternatively, run:
 
     xattr -dr com.apple.quarantine /Applications/Tokscale.app
+
+> I don't currently have an Apple Developer Account so you will have to sign it yourself (It will say unidentified developer if you don't)!
+> If you don't like the insecure popup, check / build the source code yourself.
 
 ## Features
 
