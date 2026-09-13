@@ -266,8 +266,11 @@ on the fork's `tokscale-cli` library target once, in #39, and builds on it.
 
 1. **Hourly View (#36).** Hours, with a table/profile toggle. Decide between a Snapshot fold
    and core's `get_hourly_report`, and which zone an hour is in, so an hour sums to Daily's day.
-2. **Agents View (#37).** Settle what an agent is first: `CONTEXT.md` says "by client", but
-   the TUI's `AgentUsage` groups by an `agent` string.
+2. ~~**Agents View (#37).**~~ Built. An agent is the Unified Message's `agent` string,
+   normalized as the TUI normalizes it, not a Client; `CONTEXT.md` said "by client" and was
+   wrong. `agents_report` folds the held Snapshot. Usage with no agent is its own row, which
+   the TUI drops: 75% of messages and 92% of cost on the author's corpus, so it sits apart
+   above the total.
 3. **Settings screen (#38).** `gui.json`, appearance, interval refresh and the hidden Minutely
    View. Measure a warm Scan before choosing a refresh default. The CLI's `settings.json`
    stays read-only.

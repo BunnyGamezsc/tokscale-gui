@@ -67,6 +67,30 @@ export interface Day {
   tokens: number;
 }
 
+/** One agent's usage. `agent` is null for usage with no recorded agent, which
+ *  is a row rather than dropped (#37). */
+export interface AgentRow {
+  agent: string | null;
+  clients: string[];
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  messageCount: number;
+  cost: number;
+}
+
+/** Agents by cost, most expensive first. The totals are Overview's. */
+export interface AgentsReport {
+  agents: AgentRow[];
+  totalInput: number;
+  totalOutput: number;
+  totalCacheRead: number;
+  totalMessages: number;
+  totalCost: number;
+  elapsedMs: number;
+}
+
 export interface Client {
   id: string;
   messages: number;
@@ -85,6 +109,10 @@ export const scan = (filter?: Filter, force = false) =>
 /** Re-aggregates the held Snapshot. 41-100ms, so a Group-By switch is instant. */
 export const modelReport = (groupBy: GroupBy, filter?: Filter) =>
   invoke<Report>("model_report", { groupBy, filter });
+
+/** Usage by agent, folded from the held Snapshot like `modelReport`. */
+export const agentsReport = (filter?: Filter) =>
+  invoke<AgentsReport>("agents_report", { filter });
 
 /** Re-enters the parse rather than reading the Snapshot — the one asymmetry in
  *  the surface. 0.28-0.76 s after a Scan (#27), invalidated only by a scan. */

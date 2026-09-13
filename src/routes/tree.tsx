@@ -12,19 +12,21 @@ import { ModelsView } from "@/views/models";
 import { DailyView } from "@/views/daily";
 import { StatsView } from "@/views/stats";
 import { PricingView } from "@/views/pricing";
+import { AgentsView } from "@/views/agents";
 import { FilterBar } from "@/components/filter-bar";
 import { bindings, isTyping, resolve } from "@/lib/keys";
 import { Modal } from "@/components/modal";
 import { useRefresh } from "@/lib/use-scan";
 import * as api from "@/lib/api";
 
-/** Sidebar destinations. P1 ships Overview, Models, Daily and Stats; the rest
- *  arrive in P2. Order mirrors upstream tokscale's tab order. */
+/** Sidebar destinations, and the `⌘`-digit each one answers to. Order mirrors
+ *  upstream tokscale's tab order. */
 const NAV = [
   { path: "/", label: "Overview", component: OverviewView },
   { path: "/models", label: "Models", component: ModelsView },
   { path: "/daily", label: "Daily", component: DailyView },
   { path: "/stats", label: "Stats", component: StatsView },
+  { path: "/agents", label: "Agents", component: AgentsView },
   { path: "/pricing", label: "Pricing", component: PricingView },
 ] as const;
 

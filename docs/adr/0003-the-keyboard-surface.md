@@ -53,6 +53,7 @@ binding, one deviation, stated here rather than discovered.
 | Kept | What it does | Why |
 | --- | --- | --- |
 | `⌘1`–`⌘5` | Go to Overview, Models, Daily, Stats, Pricing | Upstream's tab cycling, in the shape macOS already uses for tabs. A modifier, so it cannot collide with the graph or with a text field. |
+| `⌘5` Agents, `⌘1`–`⌘6` (#37) | Agents takes `⌘5` after Stats; Pricing moves to `⌘6` | Upstream's tab order puts Agents after Stats. The resolver already answered `⌘1`–`⌘9` and the shell bounds-checks against `NAV`, so this was one row in `NAV` and no change to `keys.ts`. With Hourly (#36) in, Agents is `⌘6` and Pricing `⌘7`. |
 | `R` | Refresh | Upstream's `r`. The one action with no visible control outside Overview. Shift is not checked: the sheet says `R`, and Shift+R meaning nothing would make the sheet a lie. |
 | `?` | Shortcuts sheet | New. There is no TUI equivalent; a terminal has a footer hint line. |
 | `Enter` / `Space` | Activate what has focus | Upstream's `Enter` opens the selected Daily/Stats detail. The platform's, once the thing is a `<button>`. |

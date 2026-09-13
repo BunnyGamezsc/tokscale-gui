@@ -133,8 +133,16 @@ that disagreement is expected rather than a bug.
 **View** — one top-level destination. Upstream has eight: Overview, Usage, Models,
 Daily, Hourly, Stats, Agents, and a hidden Minutely.
 
-**Agents** — upstream's name for the view breaking usage down by client. Retained
-despite the tension with **Client**, because renaming it would diverge from tokscale.
+**Agent** — the named role a message was produced under, inside a Client: OpenCode's
+`build`, a Claude Code subagent such as `general-purpose`, a Codex subagent. Not a Client:
+one agent can span several Clients, and one Client runs many agents. Spellings of one
+agent (`omo`, `Sisyphus`) are one agent. Most Clients record no agent at all, so much usage
+has **no agent**.
+
+**Agents** — the View breaking usage down by **Agent**, naming the Clients each agent's
+usage came from. Usage with no agent is a row of its own rather than dropped, so the
+View's total is Overview's; upstream's TUI leaves it out. _Avoid_: reading Agents as "by
+client".
 
 **Contribution Graph** — the GitHub-style calendar heatmap, on Overview and Stats. Its
 color **Ramp** is the sequence of discrete intensity steps mapping a day's usage to a
