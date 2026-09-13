@@ -26,13 +26,18 @@ Requires macOS 10.15 or later.
 
 ## Features
 
-- **Views:** Overview, Models, Daily, Hourly, Stats, Agents and Pricing
+- **Views:** Overview, Usage, Models, Daily, Hourly, Stats, Agents and Pricing, plus an
+  optional Minutely view
+- **Usage:** each provider's own quota (Claude, Codex, Copilot, Grok and more), read from the
+  credentials their tools already stored
+- **Sync:** pulls Cursor, Antigravity and Trae usage into the local cache every view reads
+- **Accounts:** add, switch and remove Cursor and Codex accounts from Settings (⌘,)
 - **Report Filter:** narrow by client and date range, shared across all views
 - **Contribution Graph:** one year at a time, with a year picker and full keyboard access
 - **Manual pricing:** set rates for models that have usage but no price
 - **Cold first run:** the first scan reads every client's transcripts and takes about 21–40 s;
   later scans are much faster
-- **Keyboard:** ⌘1–⌘7 switch views, `R` refreshes, `?` lists the shortcuts
+- **Keyboard:** ⌘1–⌘8 switch views, `R` refreshes, ⌘, opens Settings, `?` lists the shortcuts
 - **Vendor CLI resolution:** finds CLIs installed outside the default `PATH` (Homebrew, nvm,
   `~/.local/bin` and so on), including when the app is launched from Finder rather than a shell
 
@@ -86,7 +91,10 @@ together. See ADR 0001 and ADR 0002.
 
 - **macOS only.** The window style, theming and shortcuts are built for macOS (ADR 0003).
 - **Unsigned and not notarized.**
-- **No auth or provider sync yet.** That's the planned P3 phase.
+- **Keychain prompts** can appear the first time the Usage view reads a stored credential.
+  `/usr/bin/security` is the reader.
+- **A Cursor sync makes the Cursor app's signed-in account active again**, as
+  `tokscale cursor sync` does.
 
 ## Credits
 
