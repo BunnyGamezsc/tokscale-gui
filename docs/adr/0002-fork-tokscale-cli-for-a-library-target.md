@@ -100,3 +100,16 @@ added only because no function returned the data:
   `commands/usage/grok.rs`. With no resolver installed it is `Command::new(name)`.
 
 No feature gate was added; ADR 0007 records the measurement behind that.
+
+**Amended 2026-09-13** (#40). `gui-v4.15.1-lib.4` adds three more seams for provider sync.
+Cursor needed none: `cursor::sync_cursor_cache` already returns a `SyncCursorResult`.
+
+- `antigravity.rs`: `sync_antigravity_cache`, the body of `run_antigravity_sync`, returning
+  the seven counts it used to print as `AntigravitySync`. `run_antigravity_sync` prints
+  from it, unchanged in output.
+- `trae.rs`: `sync::sync_trae`, the variant fall-over from `run_trae_sync`, returning the
+  variant that succeeded and its session count. Unlike `run_trae_sync` it doesn't filter
+  by `has_credentials`, which `run_trae_sync` now does before calling it.
+- `trae.rs`: `auth::has_desktop_login`, whether the desktop client's `storage.json`
+  exists. `decrypt_from_storage` now reads its path through the same private
+  `storage_path`.

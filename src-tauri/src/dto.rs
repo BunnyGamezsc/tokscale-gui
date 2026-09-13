@@ -261,3 +261,25 @@ pub struct QuotaMetric {
     /// As sent: RFC 3339 from most providers, free text from a few.
     pub resets_at: Option<String>,
 }
+
+/// **Sync** (#40): when a provider's cache last received data, in Unix seconds.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncStatus {
+    pub provider: &'static str,
+    pub last_synced_at: Option<u64>,
+}
+
+/// One sync's result. `state` is `"synced"`, `"notSetUp"` or `"failed"`.
+/// `count` is in `unit` (`"rows"` for Cursor, `"sessions"` otherwise) and is 0
+/// unless synced. `message` says why it didn't sync, or what went wrong beside
+/// a sync that did.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncOutcome {
+    pub provider: &'static str,
+    pub state: &'static str,
+    pub count: usize,
+    pub unit: &'static str,
+    pub message: Option<String>,
+}

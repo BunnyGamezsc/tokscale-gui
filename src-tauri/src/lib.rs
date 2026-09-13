@@ -32,6 +32,7 @@ mod dto;
 mod gui;
 mod pricing;
 mod settings;
+mod sync;
 mod usage;
 mod vendor;
 
@@ -78,6 +79,8 @@ pub fn run() {
             pricing::clear_custom_pricing,
             vendor::vendor_clis,
             usage::quota,
+            sync::sync,
+            sync::sync_status,
             gui::gui_settings,
             gui::set_gui_settings,
         ])

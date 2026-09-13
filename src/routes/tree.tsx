@@ -28,6 +28,7 @@ import { UsageView } from "@/views/usage";
 import { FilterBar } from "@/components/filter-bar";
 import { bindings, isTyping, resolve } from "@/lib/keys";
 import { Modal } from "@/components/modal";
+import { SyncButton } from "@/components/sync";
 import { useAutoRefresh, useGuiSettings, useRefresh } from "@/lib/use-scan";
 import * as api from "@/lib/api";
 
@@ -127,6 +128,8 @@ function Shell() {
         </nav>
 
         <div className="mt-auto">
+          <SyncButton />
+
           {/* No binding: seven is the count ADR 0003 defends, and a sheet that
               is read once after an install does not earn the eighth. */}
           <button

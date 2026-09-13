@@ -168,3 +168,19 @@ last answer.
   `run`, before any command can fetch.
 - #41 inherits two known problems: the interpreter gap for nvm scripts, and whether
   `Codex Auth` prompts.
+
+## Addendum 2026-09-13 (#40): sync runtimes
+
+`cursor.rs`'s `Runtime::new()` calls are all in its `run_*` wrappers and tests. `sync_cursor_cache`
+builds none, and neither does `trae::sync::sync_trae`, so `sync.rs` awaits both with
+`tauri::async_runtime::block_on` inside `blocking`, as `priced_parse` is. `sync_antigravity_cache`
+is a plain `fn` whose RPCs run on `std::thread::scope` threads against the module's own static
+runtime, so it is called with nothing around it. The `real_sync_reaches_the_scan` probe ran all
+three as the command does with no panic: Cursor synced 11 rows in 632 ms, Antigravity (not
+running) returned in 126 ms, Trae (not installed) at once.
+
+Credentials stay read, never obtained. Cursor's sync reads the desktop app's `state.vscdb`
+login and, as `tokscale cursor sync` does, saves it into tokscale's Cursor account store.
+Trae's decrypts the desktop client's `storage.json` when tokscale has no cached token. The
+GUI tries a Trae variant when either exists, so a user needs the Trae app signed in, not
+`tokscale trae login`.

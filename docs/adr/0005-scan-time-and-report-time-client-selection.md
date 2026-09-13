@@ -147,3 +147,19 @@ explains costs rather than gating them. A rescan undoes nothing and loses nothin
 - The GUI cannot repair a `settings.json` the CLI has never written. A machine where only
   the GUI has ever run has no pinned Bucket Timezone, and day keys follow the system zone
   exactly as they did before pinning existed.
+
+## Amended 2026-09-13 (#40): Cursor is an Enabled Client
+
+"Every `parse_local` Client" was one Client short. Upstream declares Cursor
+`parse_local: false`: its Source is `~/.config/tokscale/cursor-cache`, which only a sync
+writes, and the CLI reads it when a sync is in play. With `clients: None`, core's
+`resolve_local_parse_request` skips the Cursor lane, so a Cursor sync would write rows no
+View could show. Measured on the author's machine: a sync wrote 11 rows, and the Scan read
+11 Cursor messages with the list below and 0 under core's default.
+
+The GUI now hands core an explicit list whenever the Report Filter names no Client:
+`enabled_clients()` in `commands.rs`, the `parse_local` set plus Cursor plus `synthetic`.
+Scan and graph both use it, and `client_catalog` reads the same predicate (53 Clients).
+Enabled Clients is still a constant. Sync adds data to a Source; it doesn't change which
+Clients a Scan parses.
+
