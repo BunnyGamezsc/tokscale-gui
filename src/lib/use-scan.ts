@@ -44,7 +44,6 @@ function useAbandoned() {
   );
 }
 
-export const abandonScan = () => setAbandoned(true);
 
 /** How long the last real Scan took, kept across launches.
  *
@@ -123,7 +122,6 @@ export function useScan() {
       if (forced) void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== "scan" });
       return summary;
     },
-    staleTime: Infinity,
     retry: false,
   });
 
@@ -152,7 +150,7 @@ export function useScan() {
      *  finished a Scan. Read from storage rather than from `query.data`, which
      *  is 0 on the unforced path and absent entirely on a first run. */
     etaSeconds: lastRunSeconds(),
-    abandon: abandonScan,
+    abandon: () => setAbandoned(true),
   };
 }
 
@@ -189,8 +187,8 @@ function useDelayPassed(active: boolean, ms: number) {
  *  would bring a second elapsed timer, its own Abandon state, and a second
  *  `force` flag that could swallow a Refresh. */
 export function useScanLanded() {
-  const { data } = useQuery({ queryKey: ["scan"], queryFn: skipToken });
-  return Boolean(data && (data as api.ScanSummary).messages > 0);
+  const { data } = useQuery<api.ScanSummary>({ queryKey: ["scan"], queryFn: skipToken });
+  return Boolean(data && data.messages > 0);
 }
 
 /** Reports read from the held Snapshot. They cannot run until a Scan has landed,
@@ -201,7 +199,6 @@ export function useReport(groupBy: api.GroupBy, ready: boolean) {
     queryKey: ["model_report", groupBy, filter],
     queryFn: () => api.modelReport(groupBy, asArg(filter)),
     enabled: ready,
-    staleTime: Infinity,
   });
 }
 
@@ -216,7 +213,6 @@ export function useGraph(ready: boolean) {
     queryKey: ["graph_report", filter],
     queryFn: () => api.graphReport(asArg(filter)),
     enabled: ready,
-    staleTime: Infinity,
     // The Filter is in the key, so editing it is a *new* query: without this,
     // `data` would go `undefined` for the ~30 ms the narrowed call takes and the
     // grid would unmount mid-edit. Ticket 32: the stale grid stays.
@@ -230,7 +226,6 @@ export function useHourly(ready: boolean) {
     queryKey: ["hourly_report", filter],
     queryFn: () => api.hourlyReport(asArg(filter)),
     enabled: ready,
-    staleTime: Infinity,
     // Same as the graph (#32): a Filter edit keeps the old hours on screen,
     // dimmed, instead of emptying the View.
     placeholderData: keepPreviousData,
@@ -243,7 +238,6 @@ export function useMinutely(ready: boolean) {
     queryKey: ["minutely_report", filter],
     queryFn: () => api.minutelyReport(asArg(filter)),
     enabled: ready,
-    staleTime: Infinity,
     placeholderData: keepPreviousData,
   });
 }
@@ -255,7 +249,6 @@ export function useGuiSettings() {
   const { data } = useQuery({
     queryKey: ["gui_settings"],
     queryFn: api.guiSettings,
-    staleTime: Infinity,
   });
   const save = useCallback(
     async (patch: Partial<GuiSettings>) => {
@@ -294,7 +287,6 @@ export function useAgents(ready: boolean) {
     queryKey: ["agents_report", filter],
     queryFn: () => api.agentsReport(asArg(filter)),
     enabled: ready,
-    staleTime: Infinity,
   });
 }
 
@@ -304,7 +296,6 @@ export function useClients(ready: boolean) {
     queryKey: ["clients", filter],
     queryFn: () => api.clients(asArg(filter)),
     enabled: ready,
-    staleTime: Infinity,
     // Stats' only other query. It re-keys on the same Filter edit as the graph,
     // so without this the By-client list would empty underneath a grid that
     // held — half the View holding and half of it blank.
@@ -319,7 +310,6 @@ export function useAllClients(ready: boolean) {
     queryKey: ["clients", NO_FILTER],
     queryFn: () => api.clients(),
     enabled: ready,
-    staleTime: Infinity,
   });
 }
 
@@ -333,7 +323,6 @@ export function useClientCatalog() {
   return useQuery({
     queryKey: ["client_catalog"],
     queryFn: api.clientCatalog,
-    staleTime: Infinity,
   });
 }
 
@@ -342,7 +331,6 @@ export function useUnpriced(ready: boolean) {
     queryKey: ["unpriced"],
     queryFn: () => api.unpriced(),
     enabled: ready,
-    staleTime: Infinity,
   });
 }
 
@@ -350,7 +338,6 @@ export function useCustomPricing() {
   return useQuery({
     queryKey: ["custom_pricing"],
     queryFn: () => api.customPricing(),
-    staleTime: Infinity,
   });
 }
 

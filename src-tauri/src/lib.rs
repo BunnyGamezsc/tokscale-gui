@@ -4,10 +4,9 @@
 //!
 //! The command surface designed by ticket 09 now lives in `commands`:
 //!
-//! - Five commands, all `async` and all dispatched onto `spawn_blocking`:
-//!   `scan`, `model_report`, `graph_report`, `clients`, `unpriced`. Later
-//!   tickets added `client_catalog` (#28), the three `pricing` commands, and
-//!   `vendor_clis` (#23); the rule they all still follow is the one above.
+//! - Every command is `async` and dispatched onto `spawn_blocking`. Ticket 09
+//!   designed five (`scan`, `model_report`, `graph_report`, `clients`,
+//!   `unpriced`); the rest, listed in `run`, follow the same rule.
 //! - `scan` parses once into a snapshot held in `tauri::State`; the report
 //!   commands re-aggregate from that snapshot rather than rescanning.
 //! - camelCase across the whole boundary. Ticket 09 planned to get that from

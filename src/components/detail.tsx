@@ -53,7 +53,7 @@ export function drillMatch(groupBy: GroupBy, row: Entry | null) {
 
 const FINER: GroupBy = "client,provider,model";
 
-export function useDayDetail(date: string | null) {
+function useDayDetail(date: string | null) {
   // The active Report Filter still applies — the dialog has to equal the Daily
   // row it opened from, and that row is narrowed. Only the range is replaced.
   const filter = useFilter();

@@ -32,7 +32,7 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
   `lib-target`) for day-to-day work. Bump both together. See ADR 0001, 0002 and 0007.
 - React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui. pnpm.
 - TanStack **Router and Query only**. Table, Charts and Hotkeys were considered and never
-  installed — Models hand-rolls sorting over 38–198 Entries, and the graph is hand-rolled SVG.
+  installed — Models hand-rolls sorting over 38–198 Entries, and the graph is hand-rolled buttons in a CSS grid.
   #31 re-tested the Hotkeys half against a real binding set and it still holds: seven
   bindings, one `keydown` listener, one pure resolver. See ADR 0003.
 - The IPC boundary is **hand-written DTOs** in `src-tauri/src/dto.rs`, uniformly camelCase.

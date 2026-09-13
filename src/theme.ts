@@ -18,9 +18,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 /** What the user chose. Stored in `gui.json` as `appearance`. */
 export type Appearance = "system" | "light" | "dark";
 
-/** What the window is actually wearing right now. */
-export type Resolved = "light" | "dark";
-
 /** Applies an appearance to both the window and the document.
  *
  *  Order matters, and it is the opposite of the obvious one. Inside a WKWebView
@@ -33,12 +30,11 @@ export type Resolved = "light" | "dark";
  *  This is also why `tauri.conf.json` no longer pins `theme: "Dark"`: with the
  *  pin, "system" could only ever resolve to dark, whatever the machine was set
  *  to. The pin existed because there was no runtime switch; there is one now. */
-export async function applyAppearance(appearance: Appearance): Promise<Resolved> {
+export async function applyAppearance(appearance: Appearance): Promise<void> {
   const window = getCurrentWindow();
   await window.setTheme(appearance === "system" ? null : appearance);
-  const resolved = appearance === "system" ? ((await window.theme()) ?? "light") : appearance;
-  document.documentElement.dataset.theme = resolved;
-  return resolved;
+  document.documentElement.dataset.theme =
+    appearance === "system" ? ((await window.theme()) ?? "light") : appearance;
 }
 
 /** Keeps the document in step while the appearance is "system" and macOS flips
@@ -47,7 +43,7 @@ export async function applyAppearance(appearance: Appearance): Promise<Resolved>
  *  the "one place writes the theme" rule above has no exception. Listens to the
  *  *window's* theme rather than a media query, for the same reason
  *  `applyAppearance` does. Returns an unsubscribe. */
-export function followSystem(): Promise<() => void> {
+function followSystem(): Promise<() => void> {
   return getCurrentWindow().onThemeChanged(({ payload }) => {
     document.documentElement.dataset.theme = payload;
   });

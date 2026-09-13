@@ -75,7 +75,10 @@ pub fn with_settings(doc: Value, settings: &GuiSettings) -> Value {
         Value::Object(m) => m,
         _ => Map::new(),
     };
-    let normalized = settings_of(&serde_json::to_value(settings).expect("settings serialize"));
+    let normalized = GuiSettings {
+        auto_refresh_ms: settings.auto_refresh_ms.clamp(MIN_REFRESH_MS, MAX_REFRESH_MS),
+        ..settings.clone()
+    };
     if let Value::Object(known) = serde_json::to_value(normalized).expect("settings serialize") {
         map.extend(known);
     }

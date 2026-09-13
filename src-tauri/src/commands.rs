@@ -644,11 +644,7 @@ fn clients_of(messages: Vec<UnifiedMessage>, filter: &Filter) -> Vec<Client> {
     }
 
     let mut out: Vec<Client> = by_client.into_values().collect();
-    out.sort_by(|a, b| {
-        b.cost
-            .partial_cmp(&a.cost)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    out.sort_by(|a, b| b.cost.total_cmp(&a.cost));
     out
 }
 

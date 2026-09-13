@@ -1,16 +1,8 @@
 import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { SlotTable } from "@/components/slot-table";
 import { ViewHeader, Tiles } from "@/components/view";
-import { RowSkeleton, Replacing, NoMatch, NoUsage } from "@/components/states";
+import { Replacing, NoMatch, NoUsage } from "@/components/states";
 import { useGraphState, useHourly } from "@/lib/use-scan";
 import { useSnapshot } from "@/views/snapshot";
 import { clearFilter, isNarrowed, useFilter } from "@/lib/filter";
@@ -36,7 +28,6 @@ export function HourlyView() {
   // day, so reversed it closes the day, after 00:00.
   // ponytail: every active hour is a row, a few thousand over a year; virtualize if that drags.
   const slots = (hourly.data?.slots ?? []).slice().reverse();
-  const busiest = slots.reduce((max, s) => Math.max(max, s.cost), 0);
   const { hours, untimed } = profile(slots);
   const peak = hours.reduce((a, b) => (b.cost > a.cost ? b : a));
   const peakCost = peak.cost;
@@ -64,63 +55,14 @@ export function HourlyView() {
         />
 
         {mode === "table" ? (
-          <Table className="mt-5 text-small">
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="h-[26px] text-micro font-normal">Date</TableHead>
-                <TableHead className="h-[26px] text-micro font-normal">Hour</TableHead>
-                <TableHead className="h-[26px] text-right text-micro font-normal">Messages</TableHead>
-                <TableHead className="h-[26px] text-right text-micro font-normal">Tokens</TableHead>
-                <TableHead className="h-[26px] text-right text-micro font-normal">Cost</TableHead>
-                <TableHead className="h-[26px] pl-6 text-micro font-normal">Share</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {state === "waiting" ? (
-                <RowSkeleton cols={6} />
-              ) : (
-                slots.map((s) => (
-                  <TableRow key={`${s.date}-${s.hour}`} className="h-row border-border/50">
-                    <TableCell className="py-0 font-mono">{s.date}</TableCell>
-                    <TableCell
-                      className={`py-0 font-mono ${s.hour === null ? "text-muted-foreground" : ""}`}
-                    >
-                      {hourLabel(s.hour)}
-                    </TableCell>
-                    <TableCell className="tnum py-0 text-right font-mono text-muted-foreground">
-                      {fmtInt(s.messageCount)}
-                    </TableCell>
-                    <TableCell className="tnum py-0 text-right font-mono text-muted-foreground">
-                      {fmtTokens(s.tokens)}
-                    </TableCell>
-                    <TableCell className="tnum py-0 text-right font-mono">{fmtCost(s.cost)}</TableCell>
-                    <TableCell className="py-0 pl-6">
-                      <span
-                        className="block h-[6px] rounded-[1px] bg-[var(--ramp-4)]"
-                        style={{ width: busiest ? `${(s.cost / busiest) * 100}%` : 0 }}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-            {hourly.data && (
-              <TableFooter className="bg-transparent">
-                <TableRow className="h-row border-border">
-                  <TableCell className="py-0 font-medium">Total</TableCell>
-                  <TableCell className="py-0" />
-                  <TableCell className="tnum py-0 text-right font-mono">
-                    {fmtInt(hourly.data.totalMessages)}
-                  </TableCell>
-                  <TableCell className="py-0" />
-                  <TableCell className="tnum py-0 text-right font-mono font-semibold">
-                    {fmtCost(hourly.data.totalCost)}
-                  </TableCell>
-                  <TableCell className="py-0" />
-                </TableRow>
-              </TableFooter>
-            )}
-          </Table>
+          <SlotTable
+            unit="Hour"
+            slots={slots}
+            slot={(s) => s.hour}
+            label={hourLabel}
+            waiting={state === "waiting"}
+            totals={hourly.data}
+          />
         ) : (
           <section className="mt-5" aria-label="Cost by hour of day">
             {/* 24 flexible columns: ~27 px each at the 652 px minimum content

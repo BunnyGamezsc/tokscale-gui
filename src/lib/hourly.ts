@@ -1,6 +1,6 @@
 import type { HourSlot } from "./api";
 
-export type ProfileHour = { hour: number; cost: number; tokens: number; messages: number };
+type ProfileHour = { hour: number; cost: number; tokens: number; messages: number };
 
 /** The 24 hours of the day, summed over every day in the slots.
  *

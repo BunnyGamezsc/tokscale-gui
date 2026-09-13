@@ -83,13 +83,12 @@ impl ScanSummary {
     pub fn of(messages: &[UnifiedMessage], elapsed_ms: u32) -> Self {
         // `date` is already Bucket Timezone-bucketed by core, so this is the
         // real calendar day rather than a slice of a timestamp.
-        let mut days: Vec<&str> = messages.iter().map(|m| m.date.as_str()).collect();
-        days.sort_unstable();
+        let days = || messages.iter().map(|m| m.date.as_str());
 
         Self {
             messages: messages.len(),
-            first_day: days.first().map(|s| s.to_string()),
-            last_day: days.last().map(|s| s.to_string()),
+            first_day: days().min().map(str::to_string),
+            last_day: days().max().map(str::to_string),
             elapsed_ms,
         }
     }
