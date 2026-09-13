@@ -55,7 +55,7 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
   cannot make that call: `useGraph` is gated on the Scan landing. Neither of those two
   figures reproduced; see #27 for the full table and the build each number came from.
 - The Report Filter's Client narrowing is *report-time*, and the GUI has no other kind:
-  **Enabled Clients** are a constant, every `parse_local` Client, always (#30, ADR 0005).
+  **Enabled Clients** are a constant, every `parse_local` Client plus Cursor, always (#30, #40, ADR 0005).
   The Report Filter's `clients` is honoured by **two different mechanisms**, one per path.
   Core's report-time predicate consults `year`/`since`/`until` and never `clients` — pinned
   by `a_client_narrowing_is_inert_against_the_held_snapshot` — so Overview and Models, which
