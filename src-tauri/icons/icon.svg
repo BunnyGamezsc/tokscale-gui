@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2B2672"/>
+      <stop offset="1" stop-color="#110E36"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#A9D4FF"/>
+      <stop offset="1" stop-color="#3D93FF"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-60%" width="180%" height="220%">
+      <feGaussianBlur stdDeviation="20" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity=".35"/>
+    </filter>
+    <!-- a rounded token cell, drawn in isometric by each use -->
+    <rect id="cell" x="-150" y="-150" width="300" height="300" rx="92"/>
+    <!-- its edge: the cell repeated 8px apart, 56px deep -->
+    <g id="edge">
+      <use href="#cell" transform="translate(0 56) scale(1 .58) rotate(45)"/>
+      <use href="#cell" transform="translate(0 48) scale(1 .58) rotate(45)"/>
+      <use href="#cell" transform="translate(0 40) scale(1 .58) rotate(45)"/>
+      <use href="#cell" transform="translate(0 32) scale(1 .58) rotate(45)"/>
+      <use href="#cell" transform="translate(0 24) scale(1 .58) rotate(45)"/>
+      <use href="#cell" transform="translate(0 16) scale(1 .58) rotate(45)"/>
+      <use href="#cell" transform="translate(0 8) scale(1 .58) rotate(45)"/>
+    </g>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)" filter="url(#shadow)"/>
+
+  <!-- offset like a stack of coins, lighter toward the top like the graph's ramp -->
+  <g transform="translate(512 520) scale(1.3) translate(-512 -552)">
+  <g transform="translate(488 628)">
+    <use href="#edge" fill="#113A9E"/>
+    <use href="#cell" transform="scale(1 .58) rotate(45)" fill="#2A5FD0"/>
+  </g>
+  <g transform="translate(536 524)">
+    <use href="#edge" fill="#0050CC"/>
+    <use href="#cell" transform="scale(1 .58) rotate(45)" fill="#3A80F0"/>
+  </g>
+  <g transform="translate(512 420)">
+    <use href="#edge" fill="#005FE8"/>
+    <use href="#cell" transform="scale(1 .58) rotate(45)" fill="url(#top)" filter="url(#glow)"/>
+    <rect x="-96" y="-96" width="192" height="192" rx="56" transform="scale(1 .58) rotate(45)" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="18"/>
+  </g>
+  </g>
+</svg>
