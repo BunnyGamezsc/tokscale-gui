@@ -57,7 +57,7 @@ impl Filter {
             // Ticket 09: this is the ten lines `tokscale-cli` was supposed to
             // buy us. `use_env_roots` is simply "no explicit home was given".
             use_env_roots: true,
-            clients: self.clients.clone(),
+            clients: Some(self.clients.clone().unwrap_or_else(enabled_clients)),
             since: self.since.clone(),
             until: self.until.clone(),
             year: self.year.clone(),
@@ -90,11 +90,11 @@ impl Filter {
         }
     }
 
-    fn parse_options(&self) -> LocalParseOptions {
+    pub(crate) fn parse_options(&self) -> LocalParseOptions {
         LocalParseOptions {
             home_dir: None,
             use_env_roots: true,
-            clients: self.clients.clone(),
+            clients: Some(self.clients.clone().unwrap_or_else(enabled_clients)),
             since: self.since.clone(),
             until: self.until.clone(),
             year: self.year.clone(),
@@ -166,7 +166,7 @@ pub async fn scan(
 
 /// The Snapshot parse, pricing included — what `scan` runs, and what the two
 /// ignored probes below run so they measure the app's call rather than a copy.
-async fn priced_parse(options: LocalParseOptions) -> Result<Vec<UnifiedMessage>, String> {
+pub(crate) async fn priced_parse(options: LocalParseOptions) -> Result<Vec<UnifiedMessage>, String> {
     // A forced rescan re-reads the manual pricing overrides. The cached
     // service would not: it reads `custom-pricing.json` once per launch,
     // so a rate entered in this session would not show up until restart.
@@ -577,8 +577,7 @@ pub async fn graph_report(filter: Option<Filter>) -> Result<Vec<Day>, String> {
 /// Read off `ClientId::ALL` rather than the Snapshot, which is what makes it
 /// answerable *during* a Scan: `clients` below reports what a finished Scan
 /// found, so before one lands the window cannot name a single Client. This is
-/// the same set `resolve_local_parse_request` walks when no `clients` filter is
-/// given — every `parse_local` Client — minus core's own `synthetic` pseudo-
+/// the set `enabled_clients` hands core, minus core's own `synthetic` pseudo-
 /// source, which has no data location to read.
 ///
 /// Const data, no Snapshot, no I/O: it spawns nothing and cannot fail, which is
@@ -586,8 +585,26 @@ pub async fn graph_report(filter: Option<Filter>) -> Result<Vec<Day>, String> {
 #[tauri::command]
 pub fn client_catalog() -> Vec<String> {
     ClientId::iter()
-        .filter(|c| c.parse_local())
+        .filter(|c| enabled(*c))
         .map(|c| c.display_name().to_string())
+        .collect()
+}
+
+/// **Enabled Clients**: core's `parse_local` set plus Cursor. Upstream marks
+/// Cursor `parse_local: false` because its Source is the sync cache, and the
+/// CLI only reads it when a sync is in play. Left to core's default, a Scan
+/// never reads what a Cursor sync wrote (#40, ADR 0005).
+fn enabled(c: ClientId) -> bool {
+    c.parse_local() || c == ClientId::Cursor
+}
+
+/// What a Scan and the graph ask core for when the Report Filter names no
+/// Client: `resolve_local_parse_request`'s default, with Cursor added.
+fn enabled_clients() -> Vec<String> {
+    ClientId::iter()
+        .filter(|c| enabled(*c))
+        .map(|c| c.as_str().to_string())
+        .chain(["synthetic".to_string()])
         .collect()
 }
 
@@ -700,15 +717,17 @@ mod tests {
     fn the_catalog_names_every_client_a_scan_reads() {
         let catalog = client_catalog();
         assert_eq!(
-            catalog.len(),
-            ClientId::iter().filter(|c| c.parse_local()).count(),
-            "the catalog must mirror resolve_local_parse_request's default set"
+            catalog.len() + 1,
+            enabled_clients().len(),
+            "the catalog must mirror what a Scan asks core for, minus synthetic"
         );
         assert!(catalog.contains(&"Claude Code".to_string()));
+        // Core's default set leaves Cursor out; a Scan must not (#40).
+        assert!(catalog.contains(&ClientId::Cursor.display_name().to_string()));
         // `synthetic` is core's pseudo-source, not a place on disk to look.
         assert!(!catalog.iter().any(|c| c.eq_ignore_ascii_case("synthetic")));
-        // 52 of core's 53 declared Clients; one is submit-only.
-        assert_eq!(catalog.len(), 52);
+        // All 53 of core's declared Clients.
+        assert_eq!(catalog.len(), 53);
     }
 
     fn msg(client: &str, model: &str, date: &str, cost: f64) -> UnifiedMessage {

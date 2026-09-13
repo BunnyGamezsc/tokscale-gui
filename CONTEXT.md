@@ -92,9 +92,16 @@ changes what an Entry *means* and costs a re-aggregation (41–100 ms). Two oper
 two orders of magnitude, and upstream gives both the one word "clients" — `LocalParseOptions.clients`
 is fed by the TUI picker *and* by `--client` flags, which is where the confusion starts.
 
-In the GUI, Enabled Clients is a **constant**: every `parse_local` Client, always, which
-is the set `client_catalog` names. There is no control for it, so every Client control in
-the window is a Report Filter control (#30, ADR 0005).
+In the GUI, Enabled Clients is a **constant**: every `parse_local` Client plus Cursor,
+always, which is the set `client_catalog` names. Upstream marks Cursor not `parse_local`
+because only a Sync fills its Source (#40). There is no control for it, so every Client
+control in the window is a Report Filter control (#30, ADR 0005).
+
+**Sync** — pulling Cursor, Antigravity or Trae usage from the provider into the local cache
+that is that Client's Source. A Sync adds data a Scan reads; it doesn't change Enabled
+Clients, and it shows in the Views only after the Refresh that follows it. A provider is
+**not set up** when there is nothing to sync from: no Cursor or Trae login, or Antigravity
+not running.
 
 **Default Clients** — upstream's persisted `defaultClients` in `settings.json`. Despite
 the name it is neither of the above two: `build_client_filter` uses it as the default for

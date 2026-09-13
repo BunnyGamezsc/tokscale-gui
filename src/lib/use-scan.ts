@@ -81,10 +81,13 @@ function lastRunSeconds(): number | null {
  *  lands (see `useScan`), because refetched now they would read the old one and
  *  be cached as current. And one parse at a time: a second forced `scan` does
  *  not stop the first, which runs on in `spawn_blocking`. So during a Scan this
- *  only resumes the wait — which is what "Wait for it" and a held `R` want. */
+ *  only resumes the wait — which is what "Wait for it" and a held `R` want.
+ *
+ *  Nor during a sync (#40), which is writing files the Scan would read. A
+ *  successful sync Refreshes when it finishes, so that Refresh isn't lost. */
 export function refreshScan(qc: QueryClient) {
   setAbandoned(false);
-  if (qc.isFetching({ queryKey: ["scan"] })) return;
+  if (qc.isFetching({ queryKey: ["scan"] }) || qc.isMutating({ mutationKey: ["sync"] })) return;
   force = true;
   void qc.invalidateQueries({ queryKey: ["scan"] });
 }

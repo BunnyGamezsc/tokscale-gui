@@ -28,7 +28,7 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 
 - Tauri v2. One binary, no sidecar, no separate CLI.
 - `tokscale-core` and `tokscale-cli` as in-process dependencies, pinned to fork tag
-  `gui-v4.15.1-lib.3` and `[patch]`ed to the `vendor/tokscale` submodule (branch
+  `gui-v4.15.1-lib.4` and `[patch]`ed to the `vendor/tokscale` submodule (branch
   `lib-target`) for day-to-day work. Bump both together. See ADR 0001, 0002 and 0007.
 - React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui. pnpm.
 - TanStack **Router and Query only**. Table, Charts and Hotkeys were considered and never
@@ -284,9 +284,11 @@ on the fork's `tokscale-cli` library target once, in #39, and builds on it.
    own on the calling thread. The fork gained three seams, all listed in ADR 0002: the
    not-set-up names, an any-age cache read for stale cards, and a spawn resolver that
    Grok's billing fallback now goes through.
-5. **Provider sync (#40).** Cursor, Antigravity and Trae, so their usage reaches the
-   Snapshot. Blocked by #39. `cursor.rs` builds runtimes with `Runtime::new()`; check them
-   under `blocking` the way #39's probe did.
+5. ~~**Provider sync (#40).**~~ Built, in the sidebar's Sync sheet. Cursor is called
+   directly; Antigravity and Trae gained data-returning seams (ADR 0002, `lib.4`). Core
+   leaves Cursor out of its default client set, so the GUI now passes Enabled Clients
+   explicitly with Cursor in (ADR 0005). A sync never overlaps a Scan, and its Refresh goes
+   through `refreshScan`. Antigravity's sync is unproven on a machine where it runs.
 6. **Accounts (#41).** Cursor and Codex multi-account. `codex app-server` spawns through
    `tokscale_cli::spawn`. Under nvm `codex` is a `#!/usr/bin/env node` script, so an
    absolute path alone won't run it from Finder (ADR 0007). Blocked by #39 and #40.

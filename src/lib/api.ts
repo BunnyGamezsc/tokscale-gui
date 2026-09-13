@@ -263,3 +263,29 @@ export interface Quota {
 
 /** Asks every provider with credentials for its quota. Network-bound, seconds. */
 export const quota = () => invoke<Quota>("quota");
+
+/** The providers whose usage has to be synced into a local cache before a Scan
+ *  can read it. */
+export type SyncProvider = "cursor" | "antigravity" | "trae";
+
+/** When a provider's cache last received data, in Unix seconds. */
+export interface SyncStatus {
+  provider: SyncProvider;
+  lastSyncedAt: number | null;
+}
+
+/** `count` is in `unit` and is 0 unless synced. `message` says why it didn't
+ *  sync, or what went wrong beside a sync that did. */
+export interface SyncOutcome {
+  provider: SyncProvider;
+  state: "synced" | "notSetUp" | "failed";
+  count: number;
+  unit: "rows" | "sessions" | "";
+  message: string | null;
+}
+
+export const syncStatus = () => invoke<SyncStatus[]>("sync_status");
+
+/** Network-bound, seconds. Adds data a Scan reads; the Refresh after it is the
+ *  caller's, through `refreshScan`. */
+export const sync = (provider: SyncProvider) => invoke<SyncOutcome>("sync", { provider });
