@@ -10,6 +10,7 @@ import * as api from "./api";
 import { asArg, NO_FILTER, useFilter } from "./filter";
 import { graphState, PENDING_DELAY_MS, type GraphState } from "./graph-pending";
 import { scanState, SETTLE_DELAY_MS, type ScanState } from "./scan-state";
+import { DEFAULT_SETTINGS, type GuiSettings } from "./settings";
 
 /** Refresh has exactly one owner, and it is not a `useScan` call.
  *
@@ -52,8 +53,8 @@ export const abandonScan = () => setAbandoned(true);
  *  run has no run in front of it at all, so within one session the estimate was
  *  only ever visible on a Refresh. The webview's own storage survives both a
  *  reload and a relaunch, which is exactly the span the estimate is about;
- *  there is no `gui.json` yet (P2) and this does not need one — it is a hint,
- *  not state, and a machine that has never scanned correctly has none.
+ *  it stays out of `gui.json` (#38) because it is a hint, not state, and a
+ *  machine that has never scanned correctly has none.
  */
 const ETA_KEY = "tokscale.lastScanMs";
 
@@ -231,6 +232,57 @@ export function useHourly(ready: boolean) {
     // dimmed, instead of emptying the View.
     placeholderData: keepPreviousData,
   });
+}
+
+export function useMinutely(ready: boolean) {
+  const filter = useFilter();
+  return useQuery({
+    queryKey: ["minutely_report", filter],
+    queryFn: () => api.minutelyReport(asArg(filter)),
+    enabled: ready,
+    staleTime: Infinity,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** `gui.json`. Seeded by `main.tsx` before the window shows, so this is never
+ *  pending in practice; the query is here so a save has a cache to update. */
+export function useGuiSettings() {
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["gui_settings"],
+    queryFn: api.guiSettings,
+    staleTime: Infinity,
+  });
+  const save = useCallback(
+    async (patch: Partial<GuiSettings>) => {
+      const current = qc.getQueryData<GuiSettings>(["gui_settings"]) ?? DEFAULT_SETTINGS;
+      qc.setQueryData(["gui_settings"], await api.setGuiSettings({ ...current, ...patch }));
+    },
+    [qc],
+  );
+  return { settings: data ?? DEFAULT_SETTINGS, save };
+}
+
+/** Interval refresh: a `refreshScan` on a timer, so a tick while a Scan is in
+ *  flight does nothing, exactly as a held `R` does (#33).
+ *
+ *  It rescans rather than refetching reports: every report but the graph reads
+ *  the held Snapshot, so refetching them without a Scan returns what is already
+ *  on screen. A hidden window skips its tick; a Scan nobody can see is the
+ *  laptop-battery cost #38 warned about. */
+export function useAutoRefresh() {
+  const qc = useQueryClient();
+  const { settings } = useGuiSettings();
+  const { autoRefreshEnabled: enabled, autoRefreshMs: ms } = settings;
+
+  useEffect(() => {
+    if (!enabled) return;
+    const id = setInterval(() => {
+      if (!document.hidden) refreshScan(qc);
+    }, ms);
+    return () => clearInterval(id);
+  }, [qc, enabled, ms]);
 }
 
 export function useAgents(ready: boolean) {

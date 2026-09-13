@@ -129,6 +129,27 @@ pub struct HourlyReport {
     pub elapsed_ms: u32,
 }
 
+/// One minute of one day. `minute` counts from the day's midnight in the Bucket
+/// Timezone, so 0..1440; `None` is untimed, as in Hourly.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MinuteSlot {
+    pub date: String,
+    pub minute: Option<u16>,
+    pub tokens: i64,
+    pub message_count: i32,
+    pub cost: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MinutelyReport {
+    pub slots: Vec<MinuteSlot>,
+    pub total_messages: i32,
+    pub total_cost: f64,
+    pub elapsed_ms: u32,
+}
+
 /// One agent's usage. `agent` is the TUI's normalized name, or `None` for
 /// usage with no recorded agent, which is a row rather than dropped (#37).
 #[derive(Debug, Clone, Serialize)]

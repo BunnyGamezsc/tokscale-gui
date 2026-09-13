@@ -20,6 +20,7 @@ export type KeyLike = {
 export type Action =
   | { kind: "refresh" }
   | { kind: "help" }
+  | { kind: "settings" }
   /** Zero-based, into the sidebar's destinations in the order it draws them.
    *  Unbounded here: the caller owns the list, so it owns the bounds check. */
   | { kind: "nav"; index: number };
@@ -65,7 +66,10 @@ export function resolve(e: KeyLike, typing: boolean): Action | null {
   if (e.altKey) return null;
 
   if (e.metaKey) {
-    // ⌘R stays the webview's reload: only the digits are claimed under ⌘.
+    // ⌘, is every macOS app's Settings. Matched on `key`, like `?`: the sheet
+    // advertises the character.
+    if (e.key === ",") return { kind: "settings" };
+    // ⌘R stays the webview's reload: otherwise only the digits are claimed under ⌘.
     const n = e.code.startsWith("Digit") ? Number(e.code.slice(5)) : NaN;
     return n >= 1 && n <= 9 ? { kind: "nav", index: n - 1 } : null;
   }
@@ -74,8 +78,8 @@ export function resolve(e: KeyLike, typing: boolean): Action | null {
   if (typing) return null;
   if (e.key === "?") return { kind: "help" };
   // Shift is not checked: the sheet says `R`, and Shift+R meaning something
-  // else would make the sheet a lie. Upstream spends Shift+R on auto-refresh,
-  // which is P2 and unbuilt — it can claim its own key when it arrives.
+  // else would make the sheet a lie. Upstream spends Shift+R on toggling
+  // auto-refresh; ADR 0003 records why #38 left it on the settings screen.
   if (e.code === "KeyR") return { kind: "refresh" };
   return null;
 }
@@ -98,6 +102,7 @@ export function bindings(destinations: readonly string[]): { keys: string; label
     // is pure over its destinations alone.
     { keys: "R", label: "Refresh — re-reads every client's transcripts from disk, taking seconds" },
     { keys: "?", label: "Show this list" },
+    { keys: "⌘,", label: "Settings" },
     { keys: "Tab", label: "Move focus. Enter or Space activates what it lands on" },
     { keys: "↓ ↑", label: "Contribution graph: next and previous day" },
     { keys: "→ ←", label: "Contribution graph: next and previous week" },

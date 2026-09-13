@@ -29,6 +29,7 @@ use tauri::Manager;
 
 mod commands;
 mod dto;
+mod gui;
 mod pricing;
 mod settings;
 mod vendor;
@@ -63,6 +64,7 @@ pub fn run() {
             commands::model_report,
             commands::graph_report,
             commands::hourly_report,
+            commands::minutely_report,
             commands::agents_report,
             commands::clients,
             commands::client_catalog,
@@ -71,6 +73,8 @@ pub fn run() {
             pricing::set_custom_pricing,
             pricing::clear_custom_pricing,
             vendor::vendor_clis,
+            gui::gui_settings,
+            gui::set_gui_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

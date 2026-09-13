@@ -140,6 +140,12 @@ falls on a different day than its `date`. It counts in its day but has no hour, 
 hour-of-day **Profile** leaves it out and says how much it left out. Core's own hourly fold
 files that usage under `00:00` instead, which draws a false spike at midnight (#36).
 
+**Minute slot** — an Hour slot one step finer, on the Minutely View: same day, same zone,
+same untimed rule. Minutely is hidden unless enabled in **Settings** (#38).
+
+**Settings** — the GUI's own preferences, in `gui.json` under the app config directory.
+Not the CLI's `settings.json`, which the GUI only reads (ADR 0005, ADR 0008).
+
 **Agent** — the named role a message was produced under, inside a Client: OpenCode's
 `build`, a Claude Code subagent such as `general-purpose`, a Codex subagent. Not a Client:
 one agent can span several Clients, and one Client runs many agents. Spellings of one
