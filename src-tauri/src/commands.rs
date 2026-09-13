@@ -19,8 +19,8 @@ use tokscale_core::{
 };
 
 use crate::dto::{
-    AgentRow, AgentsReport, Client, Day, Entry, HourSlot, HourlyReport, Report, ScanSummary,
-    Unpriced,
+    AgentRow, AgentsReport, Client, Day, Entry, HourSlot, HourlyReport, MinuteSlot,
+    MinutelyReport, Report, ScanSummary, Unpriced,
 };
 
 /// The Snapshot: the corpus of Unified Messages produced by one Scan, held for
@@ -261,36 +261,113 @@ fn hour_of(m: &UnifiedMessage, zone: &BucketTimezone) -> Option<u8> {
     hour.get(..2)?.parse().ok()
 }
 
+/// Tokens, messages and cost per `(date, slot)`, chronological, over the
+/// Report Filter. Hourly and Minutely differ only in `slot`.
+fn slot_totals<K: Ord>(
+    messages: Vec<UnifiedMessage>,
+    filter: &Filter,
+    slot: impl Fn(&UnifiedMessage) -> Option<K>,
+) -> std::collections::BTreeMap<(String, Option<K>), (i64, i32, f64)> {
+    let options = filter.report_options(GroupBy::Model);
+    let filtered = filter_messages_for_report(filter.narrow_clients(messages), &options);
+
+    // `None` sorts before `Some(0)`, so the untimed slot opens its day.
+    let mut totals: std::collections::BTreeMap<_, (i64, i32, f64)> = Default::default();
+    for m in &filtered {
+        let t = totals.entry((m.date.clone(), slot(m))).or_default();
+        t.0 = t.0.saturating_add(m.tokens.total());
+        // Clamped as Daily's `DayAccumulator` clamps it, so the two agree.
+        t.1 = t.1.saturating_add(m.message_count.max(0));
+        t.2 += m.cost;
+    }
+    totals
+}
+
 fn hourly_of(
     messages: Vec<UnifiedMessage>,
     filter: &Filter,
     zone: &BucketTimezone,
     started: Instant,
 ) -> HourlyReport {
-    let options = filter.report_options(GroupBy::Model);
-    let filtered = filter_messages_for_report(filter.narrow_clients(messages), &options);
-
-    // `None` sorts before `Some(0)`, so the untimed slot opens its day.
-    let mut slots: std::collections::BTreeMap<(String, Option<u8>), HourSlot> = Default::default();
-    for m in &filtered {
-        let hour = hour_of(m, zone);
-        let slot = slots
-            .entry((m.date.clone(), hour))
-            .or_insert_with(|| HourSlot {
-                date: m.date.clone(),
-                hour,
-                tokens: 0,
-                message_count: 0,
-                cost: 0.0,
-            });
-        slot.tokens = slot.tokens.saturating_add(m.tokens.total());
-        // Clamped as Daily's `DayAccumulator` clamps it, so the two agree.
-        slot.message_count = slot.message_count.saturating_add(m.message_count.max(0));
-        slot.cost += m.cost;
-    }
-    let slots: Vec<HourSlot> = slots.into_values().collect();
+    let slots: Vec<HourSlot> = slot_totals(messages, filter, |m| hour_of(m, zone))
+        .into_iter()
+        .map(|((date, hour), (tokens, message_count, cost))| HourSlot {
+            date,
+            hour,
+            tokens,
+            message_count,
+            cost,
+        })
+        .collect();
 
     HourlyReport {
+        total_messages: slots.iter().map(|s| s.message_count).sum(),
+        total_cost: slots.iter().map(|s| s.cost).sum(),
+        slots,
+        elapsed_ms: started.elapsed().as_millis() as u32,
+    }
+}
+
+/// Usage by minute, folded from the held Snapshot like `hourly_report` (#38).
+///
+/// Upstream keeps Minutely out of its on-disk cache for cardinality. The GUI
+/// has no such cache, and a minute slot is at most one per message, so this is
+/// Hourly's fold at a finer key. `a_warm_scan_and_the_minutely_fold` measured it.
+#[tauri::command]
+pub async fn minutely_report(
+    state: tauri::State<'_, Snapshot>,
+    filter: Option<Filter>,
+) -> Result<MinutelyReport, String> {
+    let filter = filter.unwrap_or_default();
+    let started = Instant::now();
+    let messages = held(&state)?;
+    blocking(move || {
+        let zone = BucketTimezone::from_scanner_settings(&crate::settings::scanner());
+        Ok(minutely_of(messages, &filter, &zone, started))
+    })
+    .await
+}
+
+/// The minute of day a message belongs to, on `hour_of`'s terms: read in the
+/// Bucket Timezone, and untimed when that instant is not on the message's `date`.
+/// Computed with chrono rather than from `hour_key`, because a zone's offset
+/// is not always whole hours (India is +05:30).
+fn minute_of(m: &UnifiedMessage, zone: &BucketTimezone) -> Option<u16> {
+    use chrono::{TimeZone, Timelike};
+    if m.timestamp <= 0 {
+        return None;
+    }
+    let (date, minute) = match zone {
+        BucketTimezone::Local => {
+            let t = chrono::Local.timestamp_millis_opt(m.timestamp).single()?;
+            (t.date_naive(), t.hour() * 60 + t.minute())
+        }
+        BucketTimezone::Pinned(tz) => {
+            let t = tz.timestamp_millis_opt(m.timestamp).single()?;
+            (t.date_naive(), t.hour() * 60 + t.minute())
+        }
+    };
+    (date.format("%Y-%m-%d").to_string() == m.date).then_some(minute as u16)
+}
+
+fn minutely_of(
+    messages: Vec<UnifiedMessage>,
+    filter: &Filter,
+    zone: &BucketTimezone,
+    started: Instant,
+) -> MinutelyReport {
+    let slots: Vec<MinuteSlot> = slot_totals(messages, filter, |m| minute_of(m, zone))
+        .into_iter()
+        .map(|((date, minute), (tokens, message_count, cost))| MinuteSlot {
+            date,
+            minute,
+            tokens,
+            message_count,
+            cost,
+        })
+        .collect();
+
+    MinutelyReport {
         total_messages: slots.iter().map(|s| s.message_count).sum(),
         total_cost: slots.iter().map(|s| s.cost).sum(),
         slots,
@@ -1189,6 +1266,66 @@ mod tests {
         let report = hourly_of(midnight_corpus(), &first_day, &seoul(), Instant::now());
         assert!(report.slots.iter().all(|s| s.date == "2026-08-01"));
         assert!((report.total_cost - 3.0).abs() < 1e-9);
+    }
+
+    /// Minutely keeps Hourly's day rule: its minutes sum to the day, the minute
+    /// is read in the Bucket Timezone, and a half-hour zone lands on the right
+    /// minute rather than on a whole-hour guess.
+    #[test]
+    fn minutes_sum_to_the_day_in_the_bucket_timezone() {
+        let report = minutely_of(midnight_corpus(), &Filter::default(), &seoul(), Instant::now());
+        let minutes = |date: &str| -> Vec<Option<u16>> {
+            report.slots.iter().filter(|s| s.date == date).map(|s| s.minute).collect()
+        };
+        assert_eq!(minutes("2026-08-01"), vec![Some(11 * 60 + 59), Some(23 * 60 + 59)]);
+        assert_eq!(minutes("2026-08-02"), vec![None, Some(0), Some(29)]);
+        assert!((report.total_cost - 31.0).abs() < 1e-9);
+        assert_eq!(report.total_messages, 5);
+
+        let kolkata = BucketTimezone::from_pinned_name(Some("Asia/Kolkata"));
+        let mut m = msg("codex", "sonnet", &kolkata.day_key(BEFORE_MIDNIGHT), 1.0);
+        m.timestamp = BEFORE_MIDNIGHT; // 14:59:59 UTC is 20:29:59 in Kolkata
+        let report = minutely_of(vec![m], &Filter::default(), &kolkata, Instant::now());
+        assert_eq!(report.slots[0].minute, Some(20 * 60 + 29));
+    }
+
+    /// #38's probe: **what does an interval refresh cost?** A GUI Refresh is a
+    /// forced Scan, so this runs `priced_parse` twice in one process. The first
+    /// is a launch against the on-disk cache; the second is what every interval
+    /// tick pays in a running app. Then the Minutely fold, with its slot count
+    /// beside Hourly's, to see whether the cardinality upstream avoids caching
+    /// is a problem for a fold.
+    ///
+    /// `CARGO_BUILD_JOBS=4 cargo test --lib --release -- --ignored --nocapture a_warm_scan`
+    ///
+    /// Prints; never asserts. The figures are recorded on #38.
+    #[test]
+    #[ignore]
+    fn a_warm_scan_and_the_minutely_fold() {
+        let scan = |label: &str| {
+            let started = Instant::now();
+            let snapshot =
+                tauri::async_runtime::block_on(priced_parse(Filter::default().parse_options()))
+                    .expect("scan");
+            println!("{label}: {} ms, {} messages", started.elapsed().as_millis(), snapshot.len());
+            snapshot
+        };
+        scan("first scan in process");
+        scan("second scan (an interval tick)");
+        let snapshot = scan("third scan");
+
+        let zone = BucketTimezone::from_scanner_settings(&crate::settings::scanner());
+        let started = Instant::now();
+        let hourly = hourly_of(snapshot.clone(), &Filter::default(), &zone, started);
+        println!("hourly fold: {} ms, {} slots", started.elapsed().as_millis(), hourly.slots.len());
+        let started = Instant::now();
+        let minutely = minutely_of(snapshot, &Filter::default(), &zone, started);
+        println!(
+            "minutely fold: {} ms, {} slots, {} KB as JSON",
+            started.elapsed().as_millis(),
+            minutely.slots.len(),
+            serde_json::to_vec(&minutely).unwrap().len() / 1024
+        );
     }
 
     // ---- Ticket 37: Agents ----

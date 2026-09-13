@@ -273,9 +273,11 @@ on the fork's `tokscale-cli` library target once, in #39, and builds on it.
    wrong. `agents_report` folds the held Snapshot. Usage with no agent is its own row, which
    the TUI drops: 75% of messages and 92% of cost on the author's corpus, so it sits apart
    above the total. With both in, `⌘1`–`⌘7`.
-3. **Settings screen (#38).** `gui.json`, appearance, interval refresh and the hidden Minutely
-   View. Measure a warm Scan before choosing a refresh default. The CLI's `settings.json`
-   stays read-only.
+3. ~~**Settings screen (#38).**~~ Built, on `⌘,`. `gui.json` lives in the app config
+   directory (ADR 0008) and is read before the window shows. A warm forced Scan measured
+   ~214 ms, so interval refresh keeps the TUI's 60 s default and 30 s–1 h bounds, off by
+   default, through `refreshScan`. Minutely is Hourly's fold at a finer key: 3,778 slots
+   in 6 ms on the author's corpus. Shift+R stays Refresh.
 4. **Usage View (#39).** Vendor-reported quota cards from `fetch_all_report_with_intent`.
    Adds `tokscale-cli` as a dependency and records how the GUI calls it in ADR 0007.
 5. **Provider sync (#40).** Cursor, Antigravity and Trae, so their usage reaches the

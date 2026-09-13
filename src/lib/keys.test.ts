@@ -71,6 +71,11 @@ test("the sheet cannot advertise a Refresh the resolver refuses", () => {
   });
 });
 
+test("⌘, opens Settings, even from a text field", () => {
+  expect(resolve(press({ code: "Comma", key: ",", metaKey: true }), true)).toEqual({ kind: "settings" });
+  expect(resolve(press({ code: "Comma", key: "," }), false)).toBeNull();
+});
+
 test("the webview's own reload is left alone", () => {
   expect(resolve(press({ code: "KeyR", key: "r", metaKey: true }), false)).toBeNull();
   expect(resolve(press({ code: "KeyR", key: "r", ctrlKey: true }), false)).toBeNull();

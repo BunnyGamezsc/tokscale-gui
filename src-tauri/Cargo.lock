@@ -4144,6 +4144,7 @@ dependencies = [
 name = "tokscale-gui"
 version = "1.0.0-pre"
 dependencies = [
+ "chrono",
  "serde",
  "serde_json",
  "tauri",

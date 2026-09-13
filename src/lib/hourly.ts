@@ -23,5 +23,10 @@ export function profile(slots: readonly HourSlot[]): { hours: ProfileHour[]; unt
   return { hours, untimed };
 }
 
-export const hourLabel = (hour: number | null) =>
-  hour === null ? "untimed" : `${String(hour).padStart(2, "0")}:00`;
+const pad = (n: number) => String(n).padStart(2, "0");
+
+export const hourLabel = (hour: number | null) => (hour === null ? "untimed" : `${pad(hour)}:00`);
+
+/** Minutes from midnight as `HH:MM`, for Minutely (#38). */
+export const minuteLabel = (minute: number | null) =>
+  minute === null ? "untimed" : `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;

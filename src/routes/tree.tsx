@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   createRootRoute,
@@ -6,18 +6,28 @@ import {
   Link,
   Outlet,
   useNavigate,
+  useRouterState,
 } from "@tanstack/react-router";
 import { OverviewView } from "@/views/overview";
 import { ModelsView } from "@/views/models";
 import { DailyView } from "@/views/daily";
 import { HourlyView } from "@/views/hourly";
+import { MinutelyView } from "@/views/minutely";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { applyAppearance, type Appearance } from "@/theme";
+import {
+  intervalFromMinutes,
+  MAX_REFRESH_MS,
+  MIN_REFRESH_MS,
+  type GuiSettings,
+} from "@/lib/settings";
 import { StatsView } from "@/views/stats";
 import { PricingView } from "@/views/pricing";
 import { AgentsView } from "@/views/agents";
 import { FilterBar } from "@/components/filter-bar";
 import { bindings, isTyping, resolve } from "@/lib/keys";
 import { Modal } from "@/components/modal";
-import { useRefresh } from "@/lib/use-scan";
+import { useAutoRefresh, useGuiSettings, useRefresh } from "@/lib/use-scan";
 import * as api from "@/lib/api";
 
 /** Sidebar destinations, and the `⌘`-digit each one answers to. Order mirrors
@@ -27,6 +37,8 @@ const NAV = [
   { path: "/models", label: "Models", component: ModelsView },
   { path: "/daily", label: "Daily", component: DailyView },
   { path: "/hourly", label: "Hourly", component: HourlyView },
+  // Upstream's tab order, and hidden unless Settings enables it (#38).
+  { path: "/minutely", label: "Minutely", component: MinutelyView },
   { path: "/stats", label: "Stats", component: StatsView },
   { path: "/agents", label: "Agents", component: AgentsView },
   { path: "/pricing", label: "Pricing", component: PricingView },
@@ -41,6 +53,20 @@ function Shell() {
   const refresh = useRefresh();
   const [help, setHelp] = useState(false);
   const [clis, setClis] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { settings } = useGuiSettings();
+  useAutoRefresh();
+
+  // The sidebar, the ⌘-digits and the sheet all read this, so hiding Minutely
+  // renumbers all three together.
+  const nav = useMemo(
+    () => (settings.minutelyViewEnabled ? NAV : NAV.filter((n) => n.path !== "/minutely")),
+    [settings.minutelyViewEnabled],
+  );
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => {
+    if (!settings.minutelyViewEnabled && pathname === "/minutely") void navigate({ to: "/" });
+  }, [settings.minutelyViewEnabled, pathname, navigate]);
 
   // One listener on the window, which is what seven bindings are worth. It sits
   // in the shell because the shell is what outlives a View: `R` has to work on
@@ -60,9 +86,10 @@ function Shell() {
 
       if (action.kind === "refresh") refresh();
       else if (action.kind === "help") setHelp(true);
+      else if (action.kind === "settings") setSettingsOpen(true);
       else {
         // Bounds-checked here because `keys.ts` does not know the sidebar.
-        const destination = NAV[action.index];
+        const destination = nav[action.index];
         if (!destination) return;
         void navigate({ to: destination.path });
       }
@@ -70,7 +97,7 @@ function Shell() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [navigate, refresh]);
+  }, [navigate, refresh, nav]);
 
   return (
     <div className="flex h-full bg-background text-foreground">
@@ -80,7 +107,7 @@ function Shell() {
             sync with tauri.conf.json. */}
         <div className="h-11 shrink-0" data-tauri-drag-region />
         <nav className="flex flex-col">
-          {NAV.map(({ path, label }) => (
+          {nav.map(({ path, label }) => (
             <Link
               key={path}
               to={path}
@@ -104,6 +131,16 @@ function Shell() {
             className="flex w-full items-center px-4 py-2 text-micro text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
           >
             Vendor CLIs
+          </button>
+
+          {/* Ungated like the two sheets beside it: settings have to work
+              during a first Scan, when every View is a gate. */}
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="flex w-full items-center justify-between px-4 py-2 text-micro text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
+          >
+            Settings
+            <kbd className="font-mono">⌘,</kbd>
           </button>
 
           {/* `?` is not discoverable on its own, so the sheet has a way in that
@@ -132,9 +169,95 @@ function Shell() {
         </div>
       </main>
 
-      {help && <Shortcuts onClose={() => setHelp(false)} />}
+      {help && <Shortcuts destinations={nav.map((n) => n.label)} onClose={() => setHelp(false)} />}
       {clis && <VendorClis onClose={() => setClis(false)} />}
+      {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
     </div>
+  );
+}
+
+/** `gui.json`, edited in place: every control saves on change. */
+function Settings({ onClose }: { onClose: () => void }) {
+  const { settings, save } = useGuiSettings();
+  const [error, setError] = useState<string | null>(null);
+  const saving = (patch: Partial<GuiSettings>) =>
+    save(patch).then(
+      () => setError(null),
+      (e) => setError(String(e)),
+    );
+  const minutes = settings.autoRefreshMs / 60_000;
+
+  return (
+    <Modal title="Settings" onClose={onClose} className="w-[480px] max-w-[90vw]">
+      <div className="px-4 py-2 text-small">
+        <div className="flex items-center justify-between gap-4 border-b border-border/50 py-2.5">
+          <span>Appearance</span>
+          <Tabs
+            value={settings.appearance}
+            onValueChange={(v) => {
+              const appearance = v as Appearance;
+              void applyAppearance(appearance);
+              void saving({ appearance });
+            }}
+          >
+            <TabsList>
+              <TabsTrigger value="system">System</TabsTrigger>
+              <TabsTrigger value="light">Light</TabsTrigger>
+              <TabsTrigger value="dark">Dark</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        <div className="border-b border-border/50 py-2.5">
+          <div className="flex items-center justify-between gap-4">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={settings.autoRefreshEnabled}
+                onChange={(e) => void saving({ autoRefreshEnabled: e.target.checked })}
+                className="accent-[var(--primary)]"
+              />
+              Refresh every
+            </label>
+            <label className="flex items-center gap-2 text-muted-foreground">
+              {/* Keyed on the stored value, so a clamped save redraws the field. */}
+              <input
+                key={settings.autoRefreshMs}
+                type="number"
+                min={MIN_REFRESH_MS / 60_000}
+                max={MAX_REFRESH_MS / 60_000}
+                defaultValue={minutes}
+                disabled={!settings.autoRefreshEnabled}
+                onBlur={(e) =>
+                  void saving({
+                    autoRefreshMs: intervalFromMinutes(e.currentTarget.valueAsNumber, settings.autoRefreshMs),
+                  })
+                }
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                className="tnum w-16 rounded-sm border border-border bg-transparent px-1.5 py-0.5 text-right font-mono text-foreground disabled:opacity-50"
+              />
+              minutes
+            </label>
+          </div>
+          <p className="mt-1.5 text-micro text-muted-foreground">
+            Each refresh re-reads every client's transcripts, the same Scan as R. It skips a tick
+            while one is running or the window is hidden.
+          </p>
+        </div>
+
+        <label className="flex items-center gap-2 py-2.5">
+          <input
+            type="checkbox"
+            checked={settings.minutelyViewEnabled}
+            onChange={(e) => void saving({ minutelyViewEnabled: e.target.checked })}
+            className="accent-[var(--primary)]"
+          />
+          Show the Minutely view
+        </label>
+
+        {error && <p className="pb-2 text-micro text-destructive">Not saved: {error}</p>}
+      </div>
+    </Modal>
   );
 }
 
@@ -149,11 +272,11 @@ function Shell() {
  *  It reads `bindings(NAV)`, so the ⌘-digit row cannot name a sidebar the
  *  sidebar does not have.
  */
-function Shortcuts({ onClose }: { onClose: () => void }) {
+function Shortcuts({ destinations, onClose }: { destinations: string[]; onClose: () => void }) {
   return (
     <Modal title="Keyboard shortcuts" onClose={onClose} className="w-[440px] max-w-[90vw]">
       <dl className="px-4 py-2 text-small">
-        {bindings(NAV.map((n) => n.label)).map((b) => (
+        {bindings(destinations).map((b) => (
           <div
             key={b.keys}
             className="flex items-baseline gap-4 border-b border-border/50 py-1.5 last:border-0"

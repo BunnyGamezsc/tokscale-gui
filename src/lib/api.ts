@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { GuiSettings } from "./settings";
 
 /** Typed wrappers over the P1 command surface.
  *
@@ -86,6 +87,23 @@ export interface HourlyReport {
   elapsedMs: number;
 }
 
+/** One minute of one day. `minute` counts from midnight in the Bucket Timezone
+ *  (0-1439), or is `null` for untimed usage, as in Hourly (#38). */
+export interface MinuteSlot {
+  date: string;
+  minute: number | null;
+  tokens: number;
+  messageCount: number;
+  cost: number;
+}
+
+export interface MinutelyReport {
+  slots: MinuteSlot[];
+  totalMessages: number;
+  totalCost: number;
+  elapsedMs: number;
+}
+
 /** One agent's usage. `agent` is null for usage with no recorded agent, which
  *  is a row rather than dropped (#37). */
 export interface AgentRow {
@@ -133,6 +151,17 @@ export const modelReport = (groupBy: GroupBy, filter?: Filter) =>
  *  costs rather than a parse. */
 export const hourlyReport = (filter?: Filter) =>
   invoke<HourlyReport>("hourly_report", { filter });
+
+/** Usage by minute, Hourly's fold at a finer key. */
+export const minutelyReport = (filter?: Filter) =>
+  invoke<MinutelyReport>("minutely_report", { filter });
+
+/** The GUI's own settings from `gui.json`. Needs no Snapshot. */
+export const guiSettings = () => invoke<GuiSettings>("gui_settings");
+
+/** Saves and returns the settings as stored, interval clamped. */
+export const setGuiSettings = (settings: GuiSettings) =>
+  invoke<GuiSettings>("set_gui_settings", { settings });
 
 /** Usage by agent, folded from the held Snapshot like `modelReport`. */
 export const agentsReport = (filter?: Filter) =>

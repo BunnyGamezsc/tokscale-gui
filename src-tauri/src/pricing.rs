@@ -181,13 +181,16 @@ pub async fn clear_custom_pricing(model: String) -> Result<(), String> {
     write_file(&doc)
 }
 
-/// Writes through a temp file in the same directory, so a crash mid-write
-/// cannot leave a half-written pricing file that core would then refuse.
 fn write_file(doc: &Value) -> Result<(), String> {
-    let final_path = path();
+    write_json(&path(), doc)
+}
+
+/// Writes through a temp file in the same directory, so a crash mid-write
+/// cannot leave a half-written file that its reader would then refuse.
+pub(crate) fn write_json(final_path: &std::path::Path, doc: &Value) -> Result<(), String> {
     let dir = final_path
         .parent()
-        .ok_or("custom-pricing.json has no parent directory")?;
+        .ok_or_else(|| format!("{} has no parent directory", final_path.display()))?;
     std::fs::create_dir_all(dir)
         .map_err(|e| format!("{} could not be created: {e}", dir.display()))?;
 
@@ -195,7 +198,7 @@ fn write_file(doc: &Value) -> Result<(), String> {
     let tmp = final_path.with_extension("json.tmp");
     std::fs::write(&tmp, text.as_bytes())
         .map_err(|e| format!("{} could not be written: {e}", tmp.display()))?;
-    tokscale_core::fs_atomic::replace_file(&tmp, &final_path)
+    tokscale_core::fs_atomic::replace_file(&tmp, final_path)
         .map_err(|e| format!("{} could not be replaced: {e}", final_path.display()))
 }
 

@@ -12,8 +12,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
  *  `tuiLightMode` in the shared `settings.json` is deliberately *not* consulted.
  *  It means "my terminal has a light background", which is a different surface
  *  from this window — one machine can reasonably want a dark GUI beside a light
- *  terminal — so the GUI neither reads nor writes it. It belongs on the P2
- *  settings screen as a TUI setting, listed under tokscale's own options.
+ *  terminal — so the GUI neither reads nor writes it.
  */
 
 /** What the user chose. Stored in `gui.json` as `appearance`. */
@@ -21,8 +20,6 @@ export type Appearance = "system" | "light" | "dark";
 
 /** What the window is actually wearing right now. */
 export type Resolved = "light" | "dark";
-
-export const DEFAULT_APPEARANCE: Appearance = "system";
 
 /** Applies an appearance to both the window and the document.
  *
@@ -62,11 +59,10 @@ export function followSystem(): Promise<() => void> {
  *  visible flash of the wrong vibrancy. Rust shows the window anyway after a
  *  timeout, so a failure in here cannot leave the app windowless.
  *
- *  P1 has no stored preference to read yet: `gui.json` arrives with ticket 09's
- *  settings command, and this takes an argument at that point. Until then the
- *  default is the only value, so it is not a parameter. */
-export async function initTheme(): Promise<void> {
-  await applyAppearance(DEFAULT_APPEARANCE);
+ *  The caller reads `gui.json` first and passes its appearance in (#38), so the
+ *  saved choice is known before the window shows, not after a render. */
+export async function initTheme(appearance: Appearance): Promise<void> {
+  await applyAppearance(appearance);
   await followSystem();
   const window = getCurrentWindow();
   await window.show();
