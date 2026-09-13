@@ -283,3 +283,40 @@ pub struct SyncOutcome {
     pub unit: &'static str,
     pub message: Option<String>,
 }
+
+/// **Accounts** (#41): each provider's saved accounts, active first. No tokens.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Accounts {
+    pub cursor: Vec<Account>,
+    pub codex: Vec<Account>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Account {
+    pub id: String,
+    pub label: Option<String>,
+    pub active: bool,
+}
+
+/// `state` is `"added"`, `"notSetUp"` (the vendor's tool isn't signed in) or
+/// `"failed"`. `message` says which, for the two that aren't added.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountAdded {
+    pub state: &'static str,
+    pub message: Option<String>,
+}
+
+/// The codex CLI's current login's activity. `status` is `"available"`,
+/// `"unsupportedCli"` (not found, or too old), `"unsupportedAuth"` or
+/// `"unavailable"`; `message` is set for all but the first.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexActivity {
+    pub status: &'static str,
+    pub lifetime_tokens: Option<u64>,
+    pub current_streak_days: Option<u64>,
+    pub message: Option<String>,
+}

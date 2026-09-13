@@ -289,3 +289,45 @@ export const syncStatus = () => invoke<SyncStatus[]>("sync_status");
 /** Network-bound, seconds. Adds data a Scan reads; the Refresh after it is the
  *  caller's, through `refreshScan`. */
 export const sync = (provider: SyncProvider) => invoke<SyncOutcome>("sync", { provider });
+
+export type AccountProvider = "cursor" | "codex";
+
+/** A saved account, active first. Tokens never reach this side. */
+export interface Account {
+  id: string;
+  label: string | null;
+  active: boolean;
+}
+
+export type Accounts = Record<AccountProvider, Account[]>;
+
+/** `notSetUp` means the vendor's own tool isn't signed in; `failed` is anything else. */
+export interface AccountAdded {
+  state: "added" | "notSetUp" | "failed";
+  message: string | null;
+}
+
+/** The codex CLI's current login's activity. `unsupportedCli` covers a codex
+ *  that isn't found as well as one too old to answer. */
+export interface CodexActivity {
+  status: "available" | "unsupportedCli" | "unsupportedAuth" | "unavailable";
+  lifetimeTokens: number | null;
+  currentStreakDays: number | null;
+  message: string | null;
+}
+
+export const accounts = () => invoke<Accounts>("accounts");
+
+/** Adds the account the vendor's tool is signed in to, and makes it active.
+ *  Cursor validates over the network. */
+export const addAccount = (provider: AccountProvider) => invoke<AccountAdded>("add_account", { provider });
+
+export const switchAccount = (provider: AccountProvider, id: string) =>
+  invoke<void>("switch_account", { provider, id });
+
+/** Deletes the account's stored credentials. Codex refuses the active one. */
+export const removeAccount = (provider: AccountProvider, id: string) =>
+  invoke<void>("remove_account", { provider, id });
+
+/** Spawns `codex app-server`. Seconds, up to ten. */
+export const codexActivity = () => invoke<CodexActivity>("codex_activity");

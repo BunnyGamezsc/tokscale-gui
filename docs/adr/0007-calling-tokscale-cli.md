@@ -184,3 +184,36 @@ login and, as `tokscale cursor sync` does, saves it into tokscale's Cursor accou
 Trae's decrypts the desktop client's `storage.json` when tokscale has no cached token. The
 GUI tries a Trae variant when either exists, so a user needs the Trae app signed in, not
 `tokscale trae login`.
+
+## Addendum 2026-09-13 (#41): accounts and the codex spawn
+
+Every account operation calls an existing public function (ADR 0002 lists them). Codex's
+import, `import_current_account`, runs only from **Add** in Settings, never from a fetch.
+Removing asks for confirmation that names the account and provider. Cursor archives that
+account's usage cache rather than purging it, and Codex refuses the active account.
+
+**The interpreter gap is closed in `spawn::command`**, which puts the resolved binary's
+directory at the front of the child's PATH. The `real_codex_activity` probe ran the test
+binary under `env -i HOME=$HOME PATH=/usr/bin:/bin:/usr/sbin:/sbin`. It resolved `codex` to
+`~/.nvm/versions/node/v26.7.0/bin`, node ran the wrapper, and the app-server answered
+`available` in 0.71 s with no process left over.
+
+**Activity is the active Codex account's.** `codex app-server` reads the codex CLI's current
+login. Pointing it at another stored account through a temporary `CODEX_HOME` could refresh
+that account's token there and leave the store holding a rotated-out refresh token. Other
+rows don't show activity, and switching accounts is how to read one.
+
+**A switch reaches both surfaces.** `switching_reaches_usage_and_sync` ran the real commands
+in a throwaway HOME with two junk-token accounts per provider. After a Codex switch,
+`quota`'s Codex cards lead with the new account, because the switch rewrites the codex CLI's
+`auth.json` and the fetch treats that login as active. The GUI invalidates `["quota"]`, so
+the next visit fetches. After a Cursor switch, `sync("cursor")` read the same store and left
+the switched account active. With the Cursor app signed in that changes:
+`sync_cursor_cache` upserts the desktop login and makes *it* active, as `tokscale cursor
+sync` does. Settings says so under Cursor. Cursor has no Usage View card.
+
+**Two costs of Codex's switch come from upstream.** It writes only `tokens` and
+`last_refresh` into `auth.json`, dropping any `OPENAI_API_KEY` there (the fork's own comment
+on `auth_document`). Settings says a switch signs the codex CLI in. Also, with no `auth.json`,
+the import reads the `Codex Auth` Keychain item, which may prompt. This machine has the file,
+so that prompt is still unchecked.

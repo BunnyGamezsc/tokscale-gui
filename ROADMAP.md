@@ -28,7 +28,7 @@ Verified against the tree, not inherited on faith. Do not relitigate these.
 
 - Tauri v2. One binary, no sidecar, no separate CLI.
 - `tokscale-core` and `tokscale-cli` as in-process dependencies, pinned to fork tag
-  `gui-v4.15.1-lib.4` and `[patch]`ed to the `vendor/tokscale` submodule (branch
+  `gui-v4.15.1-lib.5` and `[patch]`ed to the `vendor/tokscale` submodule (branch
   `lib-target`) for day-to-day work. Bump both together. See ADR 0001, 0002 and 0007.
 - React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui. pnpm.
 - TanStack **Router and Query only**. Table, Charts and Hotkeys were considered and never
@@ -289,9 +289,12 @@ on the fork's `tokscale-cli` library target once, in #39, and builds on it.
    leaves Cursor out of its default client set, so the GUI now passes Enabled Clients
    explicitly with Cursor in (ADR 0005). A sync never overlaps a Scan, and its Refresh goes
    through `refreshScan`. Antigravity's sync is unproven on a machine where it runs.
-6. **Accounts (#41).** Cursor and Codex multi-account. `codex app-server` spawns through
-   `tokscale_cli::spawn`. Under nvm `codex` is a `#!/usr/bin/env node` script, so an
-   absolute path alone won't run it from Finder (ADR 0007). Blocked by #39 and #40.
+6. ~~**Accounts (#41).**~~ Built, in Settings. Every account operation is an existing public
+   function. The fork gained `codex_activity::fetch` and a public `is_missing_credentials`
+   (`lib.5`, ADR 0002). `spawn::command` now puts the binary's directory on the child's PATH,
+   which closes nvm's interpreter gap, and the app-server transport no longer hangs killing
+   npm's wrapper. Activity is shown for the active Codex account only. A Cursor sync
+   re-activates the desktop app's login (ADR 0007).
 
 **The old P3 line merged two things.** `tokscale-cli/src/auth.rs` is the *tokscale.ai*
 account login used for submit, not provider auth. Provider credentials are read from what

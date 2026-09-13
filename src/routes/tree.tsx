@@ -29,6 +29,7 @@ import { FilterBar } from "@/components/filter-bar";
 import { bindings, isTyping, resolve } from "@/lib/keys";
 import { Modal } from "@/components/modal";
 import { SyncButton } from "@/components/sync";
+import { AccountsSettings } from "@/components/accounts";
 import { useAutoRefresh, useGuiSettings, useRefresh } from "@/lib/use-scan";
 import * as api from "@/lib/api";
 
@@ -251,7 +252,7 @@ function Settings({ onClose }: { onClose: () => void }) {
           </p>
         </div>
 
-        <label className="flex items-center gap-2 py-2.5">
+        <label className="flex items-center gap-2 border-b border-border/50 py-2.5">
           <input
             type="checkbox"
             checked={settings.minutelyViewEnabled}
@@ -260,6 +261,8 @@ function Settings({ onClose }: { onClose: () => void }) {
           />
           Show the Minutely view
         </label>
+
+        <AccountsSettings />
 
         {error && <p className="pb-2 text-micro text-destructive">Not saved: {error}</p>}
       </div>

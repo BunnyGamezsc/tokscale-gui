@@ -113,3 +113,24 @@ Cursor needed none: `cursor::sync_cursor_cache` already returns a `SyncCursorRes
 - `trae.rs`: `auth::has_desktop_login`, whether the desktop client's `storage.json`
   exists. `decrypt_from_storage` now reads its path through the same private
   `storage_path`.
+
+**Amended 2026-09-13** (#41). `gui-v4.15.1-lib.5` adds two seams and changes the spawn seam.
+Account listing, adding, switching and removing needed none: `cursor::list_accounts`,
+`read_local_cursor_session_token`, `validate_cursor_session`, `save_credentials`,
+`set_active_account` and `remove_account`, and Codex's `list_accounts`,
+`import_current_account`, `switch_active_account` and `remove_account` are already public
+and return data. The `run_*` wrappers over them aren't called.
+
+- `commands/codex_activity.rs`: `fetch`, the body of `run`, returning the
+  `CodexAccountActivitySnapshot` it used to print. Its `codex app-server` spawn moved from
+  `Command::new("codex")` onto `spawn::command`. Its transport's `Drop` now sends SIGTERM
+  (through `/bin/kill`) before SIGKILL and no longer joins its reader threads. npm's `codex`
+  is a node wrapper that gives the native binary our pipes and can't forward SIGKILL, so
+  killing it orphaned the app-server with the pipes open and the join hung forever. That
+  happened from a terminal too. It isn't a launchd problem.
+- `commands/usage/codex.rs`: `is_missing_credentials` made public, so the GUI can tell "the
+  codex CLI isn't signed in" from a failed import. A visibility change.
+- `spawn.rs`: `command` now also puts the resolved binary's directory at the front of the
+  child's `PATH`. Under nvm `codex` is a `#!/usr/bin/env node` script, and launchd's PATH
+  has no `node` (ADR 0007's interpreter gap). With no resolver installed it's still
+  `Command::new(name)` with the environment untouched.

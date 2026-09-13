@@ -27,6 +27,7 @@ use std::time::Duration;
 
 use tauri::Manager;
 
+mod accounts;
 mod commands;
 mod dto;
 mod gui;
@@ -81,6 +82,11 @@ pub fn run() {
             usage::quota,
             sync::sync,
             sync::sync_status,
+            accounts::accounts,
+            accounts::add_account,
+            accounts::switch_account,
+            accounts::remove_account,
+            accounts::codex_activity,
             gui::gui_settings,
             gui::set_gui_settings,
         ])
