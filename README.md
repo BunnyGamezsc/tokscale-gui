@@ -90,7 +90,7 @@ together. See ADR 0001 and ADR 0002.
 ## Limitations
 
 - **macOS only.** The window style, theming and shortcuts are built for macOS (ADR 0003).
-- **Unsigned and not notarized.**
+- **Self-signed and not notarized.**
 - **Keychain prompts** can appear the first time the Usage view reads a stored credential.
   `/usr/bin/security` is the reader.
 - **A Cursor sync makes the Cursor app's signed-in account active again**, as
