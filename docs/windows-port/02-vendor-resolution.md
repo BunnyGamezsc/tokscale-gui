@@ -37,7 +37,7 @@ Unlike launchd, Explorer does pass the user's `PATH` to apps. So on Windows `OnP
 
 ## Done when
 
-- [ ] `cargo test --lib` passes on macOS with the new tests.
+- [x] `cargo test --lib` passes on macOS with the new tests.
 - [ ] 🪟 `cargo test --lib` passes on the Windows CI runner.
 - [ ] 🪟 On a Windows machine with `npm i -g @openai/codex`, the Vendor CLIs sheet shows `codex` found at `...\AppData\Roaming\npm\codex.cmd`.
 
