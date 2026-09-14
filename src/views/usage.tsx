@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ViewHeader } from "@/components/view";
 import { Placeholder, Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import * as api from "@/lib/api";
 import { resetLabel, span } from "@/lib/quota";
+import { maskEmail, splitEmails } from "@/lib/redact";
 
 /** Said before a fetch can prompt. The Keychain checks the process reading an
  *  item, and that is `/usr/bin/security`, not this app (ADR 0007). */
@@ -92,6 +93,8 @@ export function UsageView() {
 }
 
 function Card({ card, now }: { card: api.QuotaCard; now: number }) {
+  const [revealed, setRevealed] = useState(false);
+  const toggle = () => setRevealed((r) => !r);
   const credits = [
     card.balance && `Balance ${card.balance}`,
     card.unlimited && "Unlimited",
@@ -106,7 +109,11 @@ function Card({ card, now }: { card: api.QuotaCard; now: number }) {
       <div className="flex items-baseline gap-3">
         <h2 className="font-medium">{card.provider}</h2>
         <span className="truncate text-small text-muted-foreground">
-          {[card.account, card.plan].filter(Boolean).join(" · ")}
+          <Redacted
+            text={[card.account, card.plan].filter(Boolean).join(" · ")}
+            revealed={revealed}
+            onToggle={toggle}
+          />
         </span>
         {card.state !== "fresh" && (
           <span
@@ -128,10 +135,34 @@ function Card({ card, now }: { card: api.QuotaCard; now: number }) {
       {credits && <p className="mt-2 text-micro text-muted-foreground">{credits}</p>}
       {card.diagnostics.map((d, i) => (
         <p key={i} className="mt-1.5 text-micro text-muted-foreground">
-          {d}
+          <Redacted text={d} revealed={revealed} onToggle={toggle} />
         </p>
       ))}
     </section>
+  );
+}
+
+/** Emails masked until clicked. One click shows every email on the card, so a
+ *  screenshot of the view doesn't carry an address by default. */
+function Redacted({ text, revealed, onToggle }: { text: string; revealed: boolean; onToggle: () => void }) {
+  return (
+    <>
+      {splitEmails(text).map((p, i) =>
+        p.email ? (
+          <button
+            key={i}
+            type="button"
+            onClick={onToggle}
+            title={revealed ? "Hide email" : "Show email"}
+            className="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-foreground"
+          >
+            {revealed ? p.text : maskEmail(p.text)}
+          </button>
+        ) : (
+          p.text
+        ),
+      )}
+    </>
   );
 }
 

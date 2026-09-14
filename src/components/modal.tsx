@@ -40,7 +40,9 @@ export function Modal({
         // Backdrop clicks land on the dialog itself, never on its content.
         if (e.target === ref.current) ref.current?.close();
       }}
-      className={`rounded-md border border-border bg-background p-0 text-foreground shadow-lg backdrop:bg-black/25 ${className}`}
+      // m-auto: Tailwind's preflight zeroes every margin, including the UA's
+      // `margin: auto` that centers a modal dialog.
+      className={`m-auto rounded-md border border-border bg-background p-0 text-foreground shadow-lg backdrop:bg-black/25 ${className}`}
     >
       <header className="flex items-baseline justify-between border-b border-border px-4 py-3">
         <h2 className="text-small font-semibold">{title}</h2>
