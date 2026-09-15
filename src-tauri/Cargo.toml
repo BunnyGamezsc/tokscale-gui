@@ -31,8 +31,8 @@ chrono = "0.4"
 # survives a missing submodule checkout, and overridden below to the submodule
 # working tree so day-to-day work edits real files rather than a cargo cache
 # clone. Bump both the tag here and the submodule when the fork moves.
-tokscale-core = { git = "https://github.com/BunnyGamezsc/tokscale.git", tag = "gui-v4.15.1-lib.5" }
-tokscale-cli = { git = "https://github.com/BunnyGamezsc/tokscale.git", tag = "gui-v4.15.1-lib.5" }
+tokscale-core = { git = "https://github.com/BunnyGamezsc/tokscale.git", tag = "gui-v4.15.1-lib.6" }
+tokscale-cli = { git = "https://github.com/BunnyGamezsc/tokscale.git", tag = "gui-v4.15.1-lib.6" }
 
 # Redirects the git dependency above to the vendored submodule. Cargo matches a
 # `[patch]` entry by source URL + package name, so the URL must be spelled
