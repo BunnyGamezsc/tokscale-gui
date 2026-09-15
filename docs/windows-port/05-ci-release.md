@@ -79,6 +79,6 @@
 ## Done when
 
 - [ ] 🪟 The `windows` workflow is green on `main`: typecheck, vitest, `cargo test --lib`, and the NSIS build.
-- [ ] The run's artifact contains exactly one `*-setup.exe`.
+- [x] The run's artifact contains exactly one `*-setup.exe`.
 - [ ] 🪟 A test tag (e.g. `v1.2.0-rc.1`, as a prerelease) gets the `.exe` and `.sha256` attached by the `release` job.
-- [ ] Artifact inspection: `7z l Tokscale-*-setup.exe` lists `tokscale-gui.exe` and `licenses\tokscale-LICENSE`, and no `.icns`/`.app` contents. File Properties show the product name "Tokscale", the right version, and the stacked-tokens icon.
+- [x] Artifact inspection: `7z l Tokscale-*-setup.exe` lists `tokscale-gui.exe` and `licenses\tokscale-LICENSE`, and no `.icns`/`.app` contents. File Properties show the product name "Tokscale", the right version, and the stacked-tokens icon.
