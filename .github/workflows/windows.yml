@@ -28,6 +28,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsc --noEmit
       - run: pnpm test
+      # generate_context! needs frontendDist to exist at compile time.
+      - run: pnpm exec vite build
       - run: cargo test --lib
         working-directory: src-tauri
       - run: pnpm tauri build --bundles nsis
