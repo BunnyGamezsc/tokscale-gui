@@ -41,5 +41,5 @@ No new tests: both changes are one OS call behind `cfg(windows)` and can't be as
 
 - [x] macOS: `cargo test --lib` in `src-tauri` passes, and `real_codex_activity` (`cargo test --lib -- --ignored --nocapture real_codex_activity`) still prints `available`.
 - [x] Tag `gui-v4.15.1-lib.6` exists on the fork remote, and `Cargo.toml`, `Cargo.lock` and the submodule all point at it.
-- [ ] 🪟 Opening Settings with a Codex account shows the activity row and no console window flashes.
-- [ ] 🪟 Afterwards, `tasklist | findstr codex` shows no leftover `codex.exe` or `node.exe` from the app.
+- [x] 🪟 Opening Settings with a Codex account shows the activity row and no console window flashes. (Owner-reported pass on native Windows, 2026-09-15.)
+- [x] 🪟 Afterwards, `tasklist | findstr codex` shows no leftover `codex.exe` or `node.exe` from the app. (Owner-reported pass on native Windows, 2026-09-15.)

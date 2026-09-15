@@ -25,5 +25,5 @@ Any failure goes back to the phase that owns it (the README table). Fix it there
 
 ## Done when
 
-- [ ] Every row passes on Windows 11 x64.
-- [ ] ADR 0009, ROADMAP and README are updated (see `README.md` "Order").
+- [x] Every row passes on Windows 11 x64. (Owner-reported pass on native Windows, 2026-09-15.)
+- [x] ADR 0009, ROADMAP and README are updated (see `README.md` "Order").

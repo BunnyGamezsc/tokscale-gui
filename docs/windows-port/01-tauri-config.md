@@ -43,7 +43,7 @@
 
 - [x] `git diff src-tauri/tauri.conf.json` is empty.
 - [x] macOS `pnpm tauri build --bundles app` still produces a signed `Tokscale.app` with the overlay titlebar (open it once).
-- [ ] 🪟 Windows build produces `Tokscale_<version>_x64-setup.exe`. The window has a native title bar and no transparent or black regions. (Proven in Phase 5 CI plus Phase 6 smoke.)
+- [x] 🪟 Windows build produces `Tokscale_<version>_x64-setup.exe`. The window has a native title bar and no transparent or black regions. (Proven in Phase 5 CI plus Phase 6 smoke.) (Owner-reported pass on native Windows, 2026-09-15.)
 
 ## Rollback
 
