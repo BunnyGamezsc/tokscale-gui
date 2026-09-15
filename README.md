@@ -24,6 +24,12 @@ Requires macOS 10.15 or later.
 > I don't currently have an Apple Developer Account so you will have to sign it yourself (It will say unidentified developer if you don't)!
 > If you don't like the insecure popup, check / build the source code yourself.
 
+| Windows | File |
+|---|---|
+| Windows 10/11 (x64) | `Tokscale-<version>-windows-x64-setup.exe` |
+
+The Windows installer isn't code-signed yet, so SmartScreen shows "Windows protected your PC". Choose **More info**, then **Run anyway**. It installs for your user only and needs no admin rights.
+
 ## Features
 
 - **Views:** Overview, Usage, Models, Daily, Hourly, Stats, Agents and Pricing, plus an
@@ -89,10 +95,10 @@ together. See ADR 0001 and ADR 0002.
 
 ## Limitations
 
-- **macOS only.** The window style, theming and shortcuts are built for macOS (ADR 0003).
-- **Self-signed and not notarized.**
+- **Self-signed and not notarized** on macOS. **Unsigned** on Windows, so SmartScreen warns.
+- **Windows is x64 only**, with no auto-update. Shortcuts use Ctrl in place of ⌘ (ADR 0009).
 - **Keychain prompts** can appear the first time the Usage view reads a stored credential.
-  `/usr/bin/security` is the reader.
+  `/usr/bin/security` is the reader. On Windows, some credentials come from Credential Manager.
 - **A Cursor sync makes the Cursor app's signed-in account active again**, as
   `tokscale cursor sync` does.
 
