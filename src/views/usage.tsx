@@ -5,10 +5,13 @@ import { Placeholder, Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import * as api from "@/lib/api";
 import { resetLabel, span } from "@/lib/quota";
+import { isWindows } from "@/lib/platform";
 import { maskEmail, splitEmails } from "@/lib/redact";
 
 /** Said before a fetch can prompt. The Keychain checks the process reading an
  *  item, and that is `/usr/bin/security`, not this app (ADR 0007). */
+const CREDENTIAL_MANAGER_NOTE =
+  "Quota is read with the credentials each vendor's own tool saved, some of them in Windows Credential Manager.";
 const KEYCHAIN_NOTE =
   "Quota is read with the credentials each vendor's own tool saved, some of them in your login Keychain. If macOS asks whether “security” may use an item, that's Apple's command-line tool reading it for this app.";
 
@@ -87,7 +90,9 @@ export function UsageView() {
         )}
       </ViewHeader>
       {body}
-      <p className="mt-6 max-w-[62ch] text-micro text-muted-foreground">{KEYCHAIN_NOTE}</p>
+      <p className="mt-6 max-w-[62ch] text-micro text-muted-foreground">
+        {isWindows() ? CREDENTIAL_MANAGER_NOTE : KEYCHAIN_NOTE}
+      </p>
     </>
   );
 }

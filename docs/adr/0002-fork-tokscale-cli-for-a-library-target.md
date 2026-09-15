@@ -134,3 +134,13 @@ and return data. The `run_*` wrappers over them aren't called.
   child's `PATH`. Under nvm `codex` is a `#!/usr/bin/env node` script, and launchd's PATH
   has no `node` (ADR 0007's interpreter gap). With no resolver installed it's still
   `Command::new(name)` with the environment untouched.
+
+**Amended 2026-09-14** (Windows port). `gui-v4.15.1-lib.6` changes two existing
+spawn paths without adding a seam:
+
+- `spawn.rs`: the resolver path sets Windows `CREATE_NO_WINDOW`, so a GUI-subsystem
+  parent does not open a console window for a vendor CLI. The CLI's unresolved
+  `Command::new(name)` path stays unchanged.
+- `commands/codex_activity.rs`: `AppServerTransport::drop` runs
+  `taskkill /T /F` on Windows before the existing `kill` and `wait`. Killing the
+  npm `codex.cmd` wrapper alone leaves its node and `codex.exe` children alive.

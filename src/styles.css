@@ -125,12 +125,24 @@
   --ramp-5: oklch(0.720 0.135 248);
 }
 
+/* Windows has a native frame and no vibrancy: no traffic-light gap, and an
+   opaque sidebar instead of a scrim. */
+[data-platform="windows"] .traffic-spacer {
+  display: none;
+}
+[data-platform="windows"] {
+  --sidebar: oklch(0.975 0.004 80);
+}
+[data-platform="windows"][data-theme="dark"] {
+  --sidebar: oklch(0.225 0.006 75);
+}
+
 @theme inline {
   /* SF is the right voice for a window that lives beside Finder; Geist Mono is
      here for figures, where a mono advance beats a proportional one even with
      `tabular-nums` on. */
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui,
-    sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   /* Load-bearing despite looking like a pure alias: shadcn's CardTitle applies
      `font-heading`. Headings do not diverge from body here, so it points back at
      --font-sans rather than being deleted. */

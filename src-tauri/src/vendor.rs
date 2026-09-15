@@ -16,7 +16,6 @@
 //! The split here is the one `settings.rs` uses: a pure inner function that is
 //! handed its directories, and a thin impure layer that discovers them.
 
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 /// The bare names upstream spawns, counted from the fork's call sites: `codex`
@@ -57,18 +56,40 @@ enum Resolution {
 /// Pure in the sense the ticket asks for: it spawns nothing, reads no
 /// environment, and only touches the directories it was handed, so its tests
 /// are temp directories rather than a machine.
-fn resolve(name: &str, path_dirs: &[PathBuf], extra_dirs: &[PathBuf]) -> Resolution {
-    if let Some(found) = first_executable(name, path_dirs) {
+fn resolve(
+    name: &str,
+    path_dirs: &[PathBuf],
+    extra_dirs: &[PathBuf],
+    exts: &[String],
+) -> Resolution {
+    if let Some(found) = first_executable(name, path_dirs, exts) {
         return Resolution::OnPath(found);
     }
-    match first_executable(name, extra_dirs) {
+    match first_executable(name, extra_dirs, exts) {
         Some(found) => Resolution::OffPath(found),
         None => Resolution::NotInstalled,
     }
 }
 
-fn first_executable(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
-    dirs.iter().map(|dir| dir.join(name)).find(|p| executable(p))
+fn first_executable(name: &str, dirs: &[PathBuf], exts: &[String]) -> Option<PathBuf> {
+    dirs.iter()
+        .flat_map(|dir| candidates(dir, name, exts))
+        .find(|p| executable(p))
+}
+
+fn candidates(dir: &Path, name: &str, exts: &[String]) -> Vec<PathBuf> {
+    let mut candidates = Vec::with_capacity(exts.len() + 1);
+    candidates.push(dir.join(name));
+    candidates.extend(exts.iter().map(|ext| {
+        let ext = ext.trim();
+        let ext = if ext.starts_with('.') {
+            ext.to_ascii_lowercase()
+        } else {
+            format!(".{ext}").to_ascii_lowercase()
+        };
+        dir.join(format!("{name}{ext}"))
+    }));
+    candidates
 }
 
 /// Follows symlinks on purpose: Homebrew's `bin` and nvm's shims are both
@@ -82,10 +103,46 @@ fn first_executable(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
 /// dependency for a case that does not arise in a user's own `~/.local/bin` or
 /// in a Homebrew prefix they own. Left open deliberately; add `libc` if a real
 /// report shows up.
+#[cfg(unix)]
 fn executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
     std::fs::metadata(path)
         .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn executable(path: &Path) -> bool {
+    std::fs::metadata(path)
+        .map(|m| m.is_file())
+        .unwrap_or(false)
+}
+
+fn executable_extensions() -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let configured = std::env::var_os("PATHEXT")
+            .and_then(|value| value.into_string().ok())
+            .map(|value| {
+                value
+                    .split(';')
+                    .filter(|ext| !ext.trim().is_empty())
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|exts| !exts.is_empty());
+        configured.unwrap_or_else(|| {
+            [".COM", ".EXE", ".BAT", ".CMD"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect()
+        })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Vec::new()
+    }
 }
 
 /// The inherited PATH, split.
@@ -99,7 +156,12 @@ fn path_dirs() -> Vec<PathBuf> {
 /// name when nothing was found, so the spawn fails the way a shell's would.
 /// Installed once, in `run` (ADR 0007).
 pub fn for_spawn(name: &str) -> PathBuf {
-    match resolve(name, &path_dirs(), &extra_dirs()) {
+    match resolve(
+        name,
+        &path_dirs(),
+        &extra_dirs(),
+        &executable_extensions(),
+    ) {
         Resolution::OnPath(p) | Resolution::OffPath(p) => p,
         Resolution::NotInstalled => name.into(),
     }
@@ -121,6 +183,45 @@ pub fn for_spawn(name: &str) -> PathBuf {
 /// different binary than the terminal does, silently, and only for users who
 /// happen to have two.
 fn extra_dirs() -> Vec<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        let user_profile = std::env::var_os("USERPROFILE").map(PathBuf::from);
+        let appdata = std::env::var_os("APPDATA").map(PathBuf::from);
+        let local_appdata = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
+        if let (Some(user_profile), Some(appdata), Some(local_appdata)) =
+            (&user_profile, &appdata, &local_appdata)
+        {
+            return windows_dirs(user_profile, appdata, local_appdata);
+        }
+        let mut dirs = Vec::new();
+
+        if let Some(appdata) = &appdata {
+            dirs.push(appdata.join("npm"));
+        }
+        if let Some(local_appdata) = &local_appdata {
+            dirs.push(local_appdata.join("Volta/bin"));
+        }
+        if let Some(user_profile) = &user_profile {
+            dirs.push(user_profile.join("scoop/shims"));
+        }
+        if let Some(local_appdata) = &local_appdata {
+            dirs.push(local_appdata.join("Microsoft/WinGet/Links"));
+        }
+        if let Some(user_profile) = &user_profile {
+            dirs.extend([
+                user_profile.join(".bun/bin"),
+                user_profile.join(".cargo/bin"),
+                user_profile.join(".local/bin"),
+            ]);
+        }
+        if let Some(local_appdata) = &local_appdata {
+            dirs.push(local_appdata.join("Programs/GitHub CLI"));
+        }
+        dirs.push(PathBuf::from(r"C:\Program Files\GitHub CLI"));
+        dirs
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
     // A missing `HOME` drops the per-user directories and keeps the Homebrew
     // prefix below rather than returning nothing: that prefix does not depend
     // on the variable, so losing it would be a second failure caused by
@@ -143,6 +244,22 @@ fn extra_dirs() -> Vec<PathBuf> {
     }
     dirs.push(PathBuf::from("/usr/local/bin"));
     dirs
+    }
+}
+
+#[allow(dead_code)]
+fn windows_dirs(user_profile: &Path, appdata: &Path, local_appdata: &Path) -> Vec<PathBuf> {
+    vec![
+        appdata.join("npm"),
+        local_appdata.join("Volta/bin"),
+        user_profile.join("scoop/shims"),
+        local_appdata.join("Microsoft/WinGet/Links"),
+        user_profile.join(".bun/bin"),
+        user_profile.join(".cargo/bin"),
+        user_profile.join(".local/bin"),
+        local_appdata.join("Programs/GitHub CLI"),
+        PathBuf::from(r"C:\Program Files\GitHub CLI"),
+    ]
 }
 
 /// The per-user half of the candidate list, as a function of `$HOME` so it can
@@ -228,11 +345,11 @@ fn version_key(dir: &Path) -> (u64, u64, u64) {
 #[tauri::command]
 pub async fn vendor_clis() -> Result<Vec<crate::dto::VendorCli>, String> {
     crate::commands::blocking(|| {
-        let (path, extra) = (path_dirs(), extra_dirs());
+        let (path, extra, exts) = (path_dirs(), extra_dirs(), executable_extensions());
         Ok(VENDOR_CLIS
             .iter()
             .map(|name| {
-                let (state, found) = match resolve(name, &path, &extra) {
+                let (state, found) = match resolve(name, &path, &extra, &exts) {
                     Resolution::OnPath(p) => ("onPath", Some(p)),
                     Resolution::OffPath(p) => ("offPath", Some(p)),
                     Resolution::NotInstalled => ("missing", None),
@@ -264,7 +381,11 @@ mod tests {
             let path = root.join(bin);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(&path, "#!/bin/sh\n").unwrap();
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
         }
         root
     }
@@ -278,14 +399,17 @@ mod tests {
         let dirs = vec![root.join("one"), root.join("two"), root.join("three")];
 
         assert_eq!(
-            resolve("gh", &[], &dirs),
+            resolve("gh", &[], &dirs, &[]),
             Resolution::OffPath(root.join("one/gh"))
         );
         assert_eq!(
-            resolve("codex", &[], &dirs),
+            resolve("codex", &[], &dirs, &[]),
             Resolution::OffPath(root.join("two/codex"))
         );
-        assert_eq!(resolve("kiro-cli", &[], &dirs), Resolution::NotInstalled);
+        assert_eq!(
+            resolve("kiro-cli", &[], &dirs, &[]),
+            Resolution::NotInstalled
+        );
 
         std::fs::remove_dir_all(&root).ok();
     }
@@ -300,14 +424,17 @@ mod tests {
         let extra = vec![root.join("shell"), root.join("elsewhere")];
 
         assert_eq!(
-            resolve("claude", &path, &extra),
+            resolve("claude", &path, &extra, &[]),
             Resolution::OnPath(root.join("shell/claude"))
         );
         assert_eq!(
-            resolve("grok", &path, &extra),
+            resolve("grok", &path, &extra, &[]),
             Resolution::OffPath(root.join("elsewhere/grok"))
         );
-        assert_eq!(resolve("gemini", &path, &extra), Resolution::NotInstalled);
+        assert_eq!(
+            resolve("gemini", &path, &extra, &[]),
+            Resolution::NotInstalled
+        );
 
         std::fs::remove_dir_all(&root).ok();
     }
@@ -318,17 +445,68 @@ mod tests {
     fn the_inherited_path_wins_over_the_candidates() {
         let root = fixture("precedence", &["shell/codex", "nvm/codex"]);
         assert_eq!(
-            resolve("codex", &[root.join("shell")], &[root.join("nvm")]),
+            resolve(
+                "codex",
+                &[root.join("shell")],
+                &[root.join("nvm")],
+                &[],
+            ),
             Resolution::OnPath(root.join("shell/codex"))
         );
         std::fs::remove_dir_all(&root).ok();
     }
 
+    #[test]
+    fn windows_extensions_resolve_in_pathext_order() {
+        let root = fixture(
+            "windows-extensions",
+            &["bin/codex.cmd", "bin/gh.cmd", "bin/gh.exe"],
+        );
+        let dirs = vec![root.join("bin")];
+        let exts = vec![".EXE".to_string(), ".CMD".to_string()];
+
+        assert_eq!(
+            resolve("codex", &[], &dirs, &exts),
+            Resolution::OffPath(root.join("bin/codex.cmd"))
+        );
+        assert_eq!(
+            resolve("gh", &[], &dirs, &exts),
+            Resolution::OffPath(root.join("bin/gh.exe"))
+        );
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn windows_candidate_directories_follow_installer_precedence() {
+        let user = PathBuf::from(r"C:\Users\someone");
+        let roaming = user.join("AppData/Roaming");
+        let local = user.join("AppData/Local");
+
+        assert_eq!(
+            windows_dirs(&user, &roaming, &local),
+            vec![
+                roaming.join("npm"),
+                local.join("Volta/bin"),
+                user.join("scoop/shims"),
+                local.join("Microsoft/WinGet/Links"),
+                user.join(".bun/bin"),
+                user.join(".cargo/bin"),
+                user.join(".local/bin"),
+                local.join("Programs/GitHub CLI"),
+                PathBuf::from(r"C:\Program Files\GitHub CLI"),
+            ]
+        );
+    }
+
     /// A directory of the right name is not a binary, and neither is a file
     /// with no executable bit — an `npm` install that failed part-way leaves
     /// exactly the second one behind.
+    #[cfg(unix)]
     #[test]
     fn a_directory_or_a_non_executable_file_is_not_a_match() {
+        use std::os::unix::fs::PermissionsExt;
+
         let root = fixture("shapes", &["bin/real"]);
         std::fs::create_dir_all(root.join("bin/codex")).unwrap();
         std::fs::write(root.join("bin/gh"), "").unwrap();
@@ -336,10 +514,13 @@ mod tests {
             .unwrap();
 
         let dirs = vec![root.join("bin")];
-        assert_eq!(resolve("codex", &[], &dirs), Resolution::NotInstalled);
-        assert_eq!(resolve("gh", &[], &dirs), Resolution::NotInstalled);
         assert_eq!(
-            resolve("real", &[], &dirs),
+            resolve("codex", &[], &dirs, &[]),
+            Resolution::NotInstalled
+        );
+        assert_eq!(resolve("gh", &[], &dirs, &[]), Resolution::NotInstalled);
+        assert_eq!(
+            resolve("real", &[], &dirs, &[]),
             Resolution::OffPath(root.join("bin/real"))
         );
 
@@ -404,13 +585,13 @@ mod tests {
         );
         // Present in both: the newer version answers.
         assert_eq!(
-            resolve("gh", &[], &dirs),
+            resolve("gh", &[], &dirs, &[]),
             Resolution::OffPath(root.join("versions/node/v26.7.0/bin/gh"))
         );
         // Present in only one, and not the one a naive "first directory" pick
         // would have used.
         assert_eq!(
-            resolve("codex", &[], &dirs),
+            resolve("codex", &[], &dirs, &[]),
             Resolution::OffPath(root.join("versions/node/v26.7.0/bin/codex"))
         );
 
@@ -466,10 +647,10 @@ mod tests {
     #[test]
     #[ignore]
     fn what_this_machine_resolves() {
-        let (path, extra) = (path_dirs(), extra_dirs());
+        let (path, extra, exts) = (path_dirs(), extra_dirs(), executable_extensions());
         println!("PATH has {} directories", path.len());
         for name in VENDOR_CLIS {
-            println!("{name:>9}  {:?}", resolve(name, &path, &extra));
+            println!("{name:>9}  {:?}", resolve(name, &path, &extra, &exts));
         }
     }
 

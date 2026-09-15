@@ -26,7 +26,8 @@ import { PricingView } from "@/views/pricing";
 import { AgentsView } from "@/views/agents";
 import { UsageView } from "@/views/usage";
 import { FilterBar } from "@/components/filter-bar";
-import { bindings, isTyping, resolve } from "@/lib/keys";
+import { bindings, isTyping, modLabel, resolve } from "@/lib/keys";
+import { isWindows } from "@/lib/platform";
 import { Modal } from "@/components/modal";
 import { SyncButton } from "@/components/sync";
 import { AccountsSettings } from "@/components/accounts";
@@ -59,6 +60,7 @@ function Shell() {
   const [help, setHelp] = useState(false);
   const [clis, setClis] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const mod = isWindows() ? "ctrl" : "meta";
   const { settings } = useGuiSettings();
   useAutoRefresh();
 
@@ -86,7 +88,7 @@ function Shell() {
       // query it is reading. Esc is the way out, and that is the platform's.
       if (document.querySelector("dialog[open]")) return;
 
-      const action = resolve(e, isTyping(e.target as HTMLElement | null));
+      const action = resolve(e, isTyping(e.target as HTMLElement | null), mod);
       if (!action) return;
 
       if (action.kind === "refresh") refresh();
@@ -102,7 +104,7 @@ function Shell() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [navigate, refresh, nav]);
+  }, [navigate, refresh, nav, mod]);
 
   return (
     <div className="flex h-full bg-background text-foreground">
@@ -110,7 +112,7 @@ function Shell() {
         {/* Reserves space for the overlaid traffic lights. See ticket 03:
             trafficLightPosition is creation-time only, so this must stay in
             sync with tauri.conf.json. */}
-        <div className="h-11 shrink-0" data-tauri-drag-region />
+        <div className="traffic-spacer h-11 shrink-0" data-tauri-drag-region />
         <nav className="flex flex-col">
           {nav.map(({ path, label }) => (
             <Link
@@ -147,7 +149,7 @@ function Shell() {
             className="flex w-full items-center justify-between px-4 py-2 text-micro text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
           >
             Settings
-            <kbd className="font-mono">⌘,</kbd>
+            <kbd className="font-mono">{modLabel(mod)},</kbd>
           </button>
 
           {/* `?` is not discoverable on its own, so the sheet has a way in that
@@ -282,15 +284,16 @@ function Settings({ onClose }: { onClose: () => void }) {
  *  sidebar does not have.
  */
 function Shortcuts({ destinations, onClose }: { destinations: string[]; onClose: () => void }) {
+  const windows = isWindows();
   return (
     <Modal title="Keyboard shortcuts" onClose={onClose} className="w-[440px] max-w-[90vw]">
       <dl className="px-4 py-2 text-small">
-        {bindings(destinations).map((b) => (
+        {bindings(destinations, windows ? "ctrl" : "meta").map((b) => (
           <div
             key={b.keys}
             className="flex items-baseline gap-4 border-b border-border/50 py-1.5 last:border-0"
           >
-            <dt className="w-[92px] shrink-0 font-mono text-muted-foreground">{b.keys}</dt>
+            <dt className={`${windows ? "w-[120px]" : "w-[92px]"} shrink-0 font-mono text-muted-foreground`}>{b.keys}</dt>
             <dd className="m-0">{b.label}</dd>
           </div>
         ))}

@@ -105,6 +105,8 @@ chrome, shared across Views. The keyboard surface and its Shortcuts sheet. The c
 first-run experience. The `scanner` half of `settings.json`, read-only. Vendor CLI resolution
 and the sheet that reports it. A measured toolchain floor and pin.
 
+Windows port: NSIS installer, Ctrl shortcuts, opaque sidebar, and a Windows CI build (ADR 0009).
+
 ## Open
 
 **All of the below is specced in [#20](https://github.com/BunnyGamezsc/tokscale-gui/issues/20)**
