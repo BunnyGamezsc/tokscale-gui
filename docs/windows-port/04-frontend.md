@@ -38,6 +38,6 @@
 
 ## Done when
 
-- [ ] `pnpm exec tsc --noEmit && pnpm test` pass, including the new `keys` cases.
+- [x] `pnpm exec tsc --noEmit && pnpm test` pass, including the new `keys` cases.
 - [ ] macOS dev build looks identical to before: traffic-light gap present, vibrant sidebar, ⌘ labels.
 - [ ] 🪟 Ctrl+1…8 switch views, Ctrl+, opens Settings, `?` shows `Ctrl+` labels, and the sidebar is opaque in light and dark with no empty strip at the top.

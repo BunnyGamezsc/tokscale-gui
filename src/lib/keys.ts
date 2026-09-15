@@ -17,6 +17,11 @@ export type KeyLike = {
   shiftKey: boolean;
 };
 
+/** The command modifier: ⌘ on macOS, Ctrl on Windows. */
+export type Mod = "meta" | "ctrl";
+
+export const modLabel = (mod: Mod) => (mod === "meta" ? "⌘" : "Ctrl+");
+
 export type Action =
   | { kind: "refresh" }
   | { kind: "help" }
@@ -61,11 +66,13 @@ export function isTyping(
  *  US, Shift+ß on German), and the sheet advertises the character, not a
  *  position. So `?` is matched on what was typed.
  */
-export function resolve(e: KeyLike, typing: boolean): Action | null {
+export function resolve(e: KeyLike, typing: boolean, mod: Mod): Action | null {
   // ⌥R types ®. Taking Option would eat characters the OS composes.
   if (e.altKey) return null;
 
-  if (e.metaKey) {
+  // Ctrl is Windows' ⌘. The other one is refused below, as ⌃ always was on macOS.
+  const modDown = mod === "meta" ? e.metaKey : e.ctrlKey;
+  if (modDown) {
     // ⌘, is every macOS app's Settings. Matched on `key`, like `?`: the sheet
     // advertises the character.
     if (e.key === ",") return { kind: "settings" };
@@ -73,7 +80,7 @@ export function resolve(e: KeyLike, typing: boolean): Action | null {
     const n = e.code.startsWith("Digit") ? Number(e.code.slice(5)) : NaN;
     return n >= 1 && n <= 9 ? { kind: "nav", index: n - 1 } : null;
   }
-  if (e.ctrlKey) return null;
+  if (e.metaKey || e.ctrlKey) return null;
 
   if (typing) return null;
   if (e.key === "?") return { kind: "help" };
@@ -92,9 +99,10 @@ export function resolve(e: KeyLike, typing: boolean): Action | null {
  *  that the app state its own bindings without reading source, and a list
  *  maintained twice stops being true the first time a destination moves.
  */
-export function bindings(destinations: readonly string[]): { keys: string; label: string }[] {
+export function bindings(destinations: readonly string[], mod: Mod): { keys: string; label: string }[] {
+  const k = modLabel(mod);
   return [
-    { keys: `⌘1 – ⌘${destinations.length}`, label: destinations.join(", ") },
+    { keys: `${k}1 – ${k}${destinations.length}`, label: destinations.join(", ") },
     // The sheet is the only place `R` announces itself, so it carries the same
     // warning Overview's button does (#30): a Refresh is the one action in the
     // window that costs a Scan, and it must not cost one silently. The figure
@@ -102,7 +110,7 @@ export function bindings(destinations: readonly string[]): { keys: string; label
     // is pure over its destinations alone.
     { keys: "R", label: "Refresh — re-reads every client's transcripts from disk, taking seconds" },
     { keys: "?", label: "Show this list" },
-    { keys: "⌘,", label: "Settings" },
+    { keys: `${k},`, label: "Settings" },
     { keys: "Tab", label: "Move focus. Enter or Space activates what it lands on" },
     { keys: "↓ ↑", label: "Contribution graph: next and previous day" },
     { keys: "→ ←", label: "Contribution graph: next and previous week" },

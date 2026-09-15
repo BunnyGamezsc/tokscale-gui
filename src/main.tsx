@@ -8,6 +8,8 @@ import * as api from "./lib/api";
 import { DEFAULT_SETTINGS } from "./lib/settings";
 import "./styles.css";
 
+document.documentElement.dataset.platform = navigator.userAgent.includes("Windows") ? "windows" : "mac";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
