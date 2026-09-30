@@ -319,3 +319,31 @@ pub struct CodexActivity {
     pub current_streak_days: Option<u64>,
     pub message: Option<String>,
 }
+/// Local-only totals used by limits and pace. Dates use the scanner's bucket zone.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpendingDay {
+    pub date: String,
+    pub cost: f64,
+    pub cost_is_complete: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelSpend {
+    pub provider: String,
+    pub model: String,
+    pub cost: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpendingStatus {
+    pub today: String,
+    pub first_day: Option<String>,
+    pub days: Vec<SpendingDay>,
+    pub models: Vec<ModelSpend>,
+    pub notification_permission: String,
+    pub notification_error: Option<String>,
+}
+

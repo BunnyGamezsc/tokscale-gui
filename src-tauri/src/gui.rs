@@ -20,6 +20,29 @@ pub const DEFAULT_REFRESH_MS: u64 = 60_000;
 pub const MIN_REFRESH_MS: u64 = 30_000;
 pub const MAX_REFRESH_MS: u64 = 3_600_000;
 pub const DEFAULT_MACHINES_URL: &str = "https://tokscale-sync.bunnygamezsc.workers.dev";
+static DOCUMENT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelLimit {
+    pub provider: String,
+    pub model: String,
+    pub amount: f64,
+}
+
+fn valid_amount(amount: f64) -> bool {
+    amount.is_finite() && amount > 0.0
+}
+
+fn normalized_limits(limits: Vec<ModelLimit>) -> Vec<ModelLimit> {
+    let mut unique = std::collections::BTreeMap::new();
+    for limit in limits {
+        if valid_amount(limit.amount) && !limit.provider.is_empty() && !limit.model.is_empty() {
+            unique.insert((limit.provider.clone(), limit.model.clone()), limit);
+        }
+    }
+    unique.into_values().collect()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -41,6 +64,9 @@ pub enum AppStyle {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GuiSettings {
+    pub monthly_limit: Option<f64>,
+    pub model_limits: Vec<ModelLimit>,
+    pub spending_notifications_enabled: bool,
     pub appearance: Appearance,
     pub app_style: AppStyle,
     pub auto_refresh_enabled: bool,
@@ -55,6 +81,9 @@ pub struct GuiSettings {
 impl Default for GuiSettings {
     fn default() -> Self {
         Self {
+            monthly_limit: None,
+            model_limits: Vec::new(),
+            spending_notifications_enabled: false,
             appearance: Appearance::System,
             app_style: AppStyle::Nocturne,
             auto_refresh_enabled: false,
@@ -77,6 +106,9 @@ pub fn settings_of(doc: &Value) -> GuiSettings {
     }
     let d = GuiSettings::default();
     GuiSettings {
+        monthly_limit: pick::<f64>(doc, "monthlyLimit").filter(|v| valid_amount(*v)),
+        model_limits: normalized_limits(pick(doc, "modelLimits").unwrap_or_default()),
+        spending_notifications_enabled: pick(doc, "spendingNotificationsEnabled").unwrap_or(false),
         appearance: pick(doc, "appearance").unwrap_or(d.appearance),
         app_style: pick(doc, "appStyle").unwrap_or(d.app_style),
         auto_refresh_enabled: pick(doc, "autoRefreshEnabled").unwrap_or(d.auto_refresh_enabled),
@@ -100,6 +132,8 @@ pub fn with_settings(doc: Value, settings: &GuiSettings) -> Value {
         _ => Map::new(),
     };
     let normalized = GuiSettings {
+        monthly_limit: settings.monthly_limit.filter(|v| valid_amount(*v)),
+        model_limits: normalized_limits(settings.model_limits.clone()),
         auto_refresh_ms: settings
             .auto_refresh_ms
             .clamp(MIN_REFRESH_MS, MAX_REFRESH_MS),
@@ -124,6 +158,21 @@ fn load(path: &Path) -> Value {
         .unwrap_or_else(|| Value::Object(Map::new()))
 }
 
+/// Serialize every GUI document update, including warning history, so a settings
+/// save cannot overwrite a threshold recorded by the refresh worker.
+pub(crate) fn update_document<T>(
+    path: &Path,
+    update: impl FnOnce(&mut Value) -> Result<T, String>,
+) -> Result<T, String> {
+    let _guard = DOCUMENT_LOCK
+        .lock()
+        .map_err(|_| "GUI document lock poisoned")?;
+    let mut doc = load(path);
+    let result = update(&mut doc)?;
+    crate::pricing::write_json(path, &doc)?;
+    Ok(result)
+}
+
 fn default_machine_label() -> String {
     hostname::get()
         .ok()
@@ -134,6 +183,9 @@ fn default_machine_label() -> String {
 
 /// Loads settings and creates the stable local identity on its first read.
 pub(crate) fn load_settings(path: &Path) -> Result<GuiSettings, String> {
+    let _guard = DOCUMENT_LOCK
+        .lock()
+        .map_err(|_| "GUI document lock poisoned")?;
     let doc = load(path);
     let mut settings = settings_of(&doc);
     let needs_save = settings.machine_id.is_empty();
@@ -173,18 +225,23 @@ pub async fn set_gui_settings(
 ) -> Result<GuiSettings, String> {
     let path = path(&app)?;
     crate::commands::blocking(move || {
-        let existing = load_settings(&path)?;
-        let settings = GuiSettings {
-            machine_id: if settings.machine_id.is_empty() {
-                existing.machine_id
-            } else {
-                settings.machine_id
-            },
-            ..settings
-        };
-        let doc = with_settings(load(&path), &settings);
-        crate::pricing::write_json(&path, &doc)?;
-        Ok(settings_of(&doc))
+        update_document(&path, |doc| {
+            let existing = settings_of(doc);
+            let settings = GuiSettings {
+                machine_id: if settings.machine_id.is_empty() {
+                    if existing.machine_id.is_empty() {
+                        uuid::Uuid::new_v4().to_string()
+                    } else {
+                        existing.machine_id
+                    }
+                } else {
+                    settings.machine_id
+                },
+                ..settings
+            };
+            *doc = with_settings(doc.take(), &settings);
+            Ok(settings_of(doc))
+        })
     })
     .await
 }
@@ -207,7 +264,9 @@ mod tests {
     /// One bad value costs that key, not the file.
     #[test]
     fn a_mistyped_key_costs_only_itself() {
-        let s = settings_of(&json!({ "appearance": "sepia", "appStyle": "sepia", "minutelyViewEnabled": true }));
+        let s = settings_of(
+            &json!({ "appearance": "sepia", "appStyle": "sepia", "minutelyViewEnabled": true }),
+        );
         assert_eq!(s.appearance, Appearance::System);
         assert_eq!(s.app_style, AppStyle::Nocturne);
         assert!(s.minutely_view_enabled);

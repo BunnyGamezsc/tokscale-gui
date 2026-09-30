@@ -33,9 +33,10 @@ mod gui;
 mod machines;
 mod pricing;
 mod settings;
+mod spending;
 mod sync;
-mod usage;
 mod updates;
+mod usage;
 mod vendor;
 
 /// How long the backend waits for the frontend to show the window itself.
@@ -48,7 +49,7 @@ pub fn run() {
     // Vendor CLIs the fork spawns resolve through `vendor` (ADR 0006, 0007).
     tokscale_cli::spawn::set_resolver(vendor::for_spawn);
 
-    let builder = tauri::Builder::default();
+    let builder = tauri::Builder::default().plugin(tauri_plugin_notification::init());
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_plugin_sparkle_updater::init());
     #[cfg(any(target_os = "windows", target_os = "linux"))]
@@ -75,6 +76,8 @@ pub fn run() {
         .manage(machines::FleetState::default())
         .invoke_handler(tauri::generate_handler![
             commands::scan,
+            spending::spending_status,
+            spending::request_spending_notifications,
             commands::model_report,
             commands::graph_report,
             commands::hourly_report,

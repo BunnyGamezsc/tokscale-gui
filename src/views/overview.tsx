@@ -1,4 +1,5 @@
 import { calendarSpan } from "@/lib/calendar";
+import { SpendingOverview } from "@/components/spending";
 import {
   Table,
   TableBody,
@@ -42,6 +43,8 @@ export function OverviewView() {
           ["Active days", days.length ? `${active}/${calendarSpan(days).length}` : "—"],
         ]}
       />
+
+      <SpendingOverview ready={snap.ready} />
 
       <section className="mt-5">
         <SectionHead title="Contribution graph" aside={days.length ? `${active} active days` : ""} />

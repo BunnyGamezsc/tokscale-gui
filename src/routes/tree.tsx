@@ -33,7 +33,8 @@ import { Modal } from "@/components/modal";
 import { SyncButton } from "@/components/sync";
 import { AccountsSettings } from "@/components/accounts";
 import { MachinesSettings } from "@/components/machines";
-import { useAutoRefresh, useGuiSettings, useRefresh } from "@/lib/use-scan";
+import { SpendingSettings } from "@/components/spending";
+import { useAutoRefresh, useGuiSettings, useRefresh, useScanLanded, useSpendingStatus } from "@/lib/use-scan";
 import * as api from "@/lib/api";
 
 /** Sidebar destinations, and the `⌘`-digit each one answers to. Order mirrors
@@ -63,6 +64,7 @@ function Shell() {
   const mod = isWindows() ? "ctrl" : "meta";
   const { settings } = useGuiSettings();
   useAutoRefresh();
+  useSpendingStatus(useScanLanded());
 
   useEffect(() => {
     document.documentElement.dataset.appStyle = settings.appStyle;
@@ -244,7 +246,7 @@ function Settings({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal title="Settings" onClose={onClose} className="w-[480px] max-w-[90vw]">
-      <div className="px-4 py-2 text-small">
+      <div className="max-h-[75vh] overflow-y-auto px-4 py-2 text-small">
         <div className="flex items-center justify-between gap-4 border-b border-border/50 py-2.5">
           <span>App style</span>
           <Tabs
@@ -308,6 +310,7 @@ function Settings({ onClose }: { onClose: () => void }) {
           Show the Minutely view
         </label>
 
+        <SpendingSettings />
         <AccountsSettings />
         <MachinesSettings />
 

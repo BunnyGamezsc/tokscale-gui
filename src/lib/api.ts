@@ -164,6 +164,30 @@ export const guiSettings = () => invoke<GuiSettings>("gui_settings");
 export const setGuiSettings = (settings: GuiSettings) =>
   invoke<GuiSettings>("set_gui_settings", { settings });
 
+export interface SpendingDay {
+  date: string;
+  cost: number;
+  costIsComplete: boolean;
+}
+
+export interface ModelSpend {
+  provider: string;
+  model: string;
+  cost: number;
+}
+
+export interface SpendingStatus {
+  today: string;
+  firstDay: string | null;
+  days: SpendingDay[];
+  models: ModelSpend[];
+  notificationPermission: string;
+  notificationError: string | null;
+}
+
+export const spendingStatus = () => invoke<SpendingStatus>("spending_status");
+export const requestSpendingNotifications = () => invoke<string>("request_spending_notifications");
+
 export interface MachineInfo {
   id: string;
   label: string;

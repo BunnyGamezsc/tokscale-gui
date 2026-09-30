@@ -4,6 +4,9 @@ export type AppStyle = "nocturne" | "terminal";
 
 /** What `gui.json` holds, as `gui_settings` returns it (`src-tauri/src/gui.rs`). */
 export interface GuiSettings {
+  monthlyLimit: number | null;
+  modelLimits: ModelLimit[];
+  spendingNotificationsEnabled: boolean;
   appearance: Appearance;
   appStyle: AppStyle;
   autoRefreshEnabled: boolean;
@@ -15,12 +18,21 @@ export interface GuiSettings {
   machinesKeyId: string | null;
 }
 
+export interface ModelLimit {
+  provider: string;
+  model: string;
+  amount: number;
+}
+
 /** Interval refresh bounds, in step with `gui.rs`. A tick is a forced Scan;
  *  #38 measured a warm one at ~214 ms, so the TUI's 30 s to 1 h holds. */
 export const MIN_REFRESH_MS = 30_000;
 export const MAX_REFRESH_MS = 3_600_000;
 
 export const DEFAULT_SETTINGS: GuiSettings = {
+  monthlyLimit: null,
+  modelLimits: [],
+  spendingNotificationsEnabled: false,
   appearance: "system",
   appStyle: "nocturne",
   autoRefreshEnabled: false,

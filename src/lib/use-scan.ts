@@ -268,6 +268,7 @@ export function useGuiSettings() {
     async (patch: Partial<GuiSettings>) => {
       const current = qc.getQueryData<GuiSettings>(["gui_settings"]) ?? DEFAULT_SETTINGS;
       qc.setQueryData(["gui_settings"], await api.setGuiSettings({ ...current, ...patch }));
+      void qc.invalidateQueries({ queryKey: ["spending_status"] });
     },
     [qc],
   );
@@ -276,6 +277,12 @@ export function useGuiSettings() {
 
 export function useMachinesStatus() {
   return useQuery({ queryKey: ["machines_status"], queryFn: api.machinesStatus });
+}
+
+/** Local unfiltered totals. The shell owns the observer so limits are checked
+ *  after every successful Scan, regardless of the active view. */
+export function useSpendingStatus(ready: boolean) {
+  return useQuery({ queryKey: ["spending_status"], queryFn: api.spendingStatus, enabled: ready });
 }
 
 /** Interval refresh: a `refreshScan` on a timer, so a tick while a Scan is in
