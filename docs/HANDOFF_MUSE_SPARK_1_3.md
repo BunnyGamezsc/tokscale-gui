@@ -12,6 +12,25 @@ Workspace: `/Users/shridhar/Desktop/Coding/jsapps/tokscalegui`, branch `main`. U
 - `scripts/prepare-sparkle.sh` downloads the official framework with `gh release download`, verifies SHA-256, then installs framework and tools. Framework/tools are ignored in git, so run script on any new macOS build machine.
 - `npm run build` passed; `cargo check --locked -q` passed on macOS after updater integration. Full tests and bundled app build remain.
 
+## Corrections during release (2026-09-30)
+
+- **Per-arch Mac builds, not universal.** Separate `aarch64` and `x86_64` bundles:
+  `Tokscale-1.3.0-macos-arm64.zip` / `Tokscale-1.3.0-macos-x86_64.zip` (~10/11 MB).
+  `generate_appcast` refuses two same-version archives in one run, so each arch got its
+  own run and the two items were merged by hand into one `appcast.xml`, arm64 item first
+  with `<sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>` (which
+  `generate_appcast` adds automatically). Ordering is load-bearing: Sparkle 2.9.6
+  `bestItemFromAppcastItems` keeps the first match on ties, and Intel Sparkle filters the
+  arm64 item out first — verified against Sparkle source before merging.
+- **Self-signed + embedded framework needs an entitlement.** The first shipped `.app`
+  crashed on launch: dyld rejected the bundled Sparkle (`different Team IDs`) because the
+  hardened runtime's library validation treats the team-less `BunnyGamezDev` signature
+  strictly. Fix: `src-tauri/entitlements.plist` sets
+  `com.apple.security.cs.disable-library-validation`, wired via
+  `bundle.macOS.entitlements`. The fixed arm64 build was launched and rendered live data.
+- Tag `v1.3.0` was moved once to pick up the entitlement fix before publishing; win/linux
+  CI re-ran on the moved tag and the release job re-uploaded with `--clobber`.
+
 ## Secrets already provisioned
 
 - Sparkle Ed25519 private key is in this Mac's login Keychain under account `dev.bunnygamezsc.tokscale-gui`. Public key is in `src-tauri/Info.plist`. Sign with `src-tauri/sparkle-bin/sign_update --account dev.bunnygamezsc.tokscale-gui <zip>`; never print or commit the private key.

@@ -57,6 +57,7 @@
     "macOS": {
       "minimumSystemVersion": "10.15",
       "signingIdentity": "BunnyGamezDev",
+      "entitlements": "entitlements.plist",
       "frameworks": ["Sparkle.framework"]
     }
   },
