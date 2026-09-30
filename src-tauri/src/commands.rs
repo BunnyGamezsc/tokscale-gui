@@ -72,7 +72,7 @@ pub struct Filter {
 }
 
 impl Filter {
-    fn report_options(&self, group_by: GroupBy) -> ReportOptions {
+    pub(crate) fn report_options(&self, group_by: GroupBy) -> ReportOptions {
         ReportOptions {
             home_dir: None,
             // Ticket 09: this is the ten lines `tokscale-cli` was supposed to
@@ -101,7 +101,7 @@ impl Filter {
     ///
     /// An empty selection narrows to nothing rather than to everything — that
     /// is what core's parse path does with `Some(vec![])` too.
-    fn narrow_clients(&self, messages: Vec<UnifiedMessage>) -> Vec<UnifiedMessage> {
+    pub(crate) fn narrow_clients(&self, messages: Vec<UnifiedMessage>) -> Vec<UnifiedMessage> {
         match &self.clients {
             Some(want) => messages
                 .into_iter()
@@ -144,7 +144,7 @@ where
 
 /// The held Snapshot, cloned out from under the lock so the report commands
 /// can fold it inside `blocking` without holding the lock there.
-fn held(
+pub(crate) fn held(
     state: &Snapshot,
     fleet: &FleetState,
     filter: &Filter,

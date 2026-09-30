@@ -1,4 +1,5 @@
 import { calendarSpan } from "@/lib/calendar";
+import { PeriodSummaries } from "@/components/insights";
 import {
   Table,
   TableBody,
@@ -126,6 +127,7 @@ export function DailyView() {
         </Table>
       </Replacing>
 
+      <PeriodSummaries ready={snap.ready} />
       {dayDialog.dialog}
     </>
   );

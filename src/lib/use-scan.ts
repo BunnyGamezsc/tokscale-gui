@@ -285,6 +285,11 @@ export function useSpendingStatus(ready: boolean) {
   return useQuery({ queryKey: ["spending_status"], queryFn: api.spendingStatus, enabled: ready });
 }
 
+export function useInsights(ready: boolean) {
+  const filter = useFilter();
+  return useQuery({ queryKey: ["insights_report", filter], queryFn: () => api.insightsReport(asArg(filter)), enabled: ready });
+}
+
 /** Interval refresh: a `refreshScan` on a timer, so a tick while a Scan is in
  *  flight does nothing, exactly as a held `R` does (#33).
  *

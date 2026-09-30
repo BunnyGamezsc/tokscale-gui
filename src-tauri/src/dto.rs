@@ -347,3 +347,49 @@ pub struct SpendingStatus {
     pub notification_error: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyTotal {
+    pub date: String,
+    pub cost: f64,
+    pub tokens: i64,
+    pub message_count: i32,
+    pub cost_is_complete: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Workspace {
+    pub key: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSpend {
+    pub client: String,
+    pub session_id: String,
+    pub title: Option<String>,
+    pub models: Vec<String>,
+    pub providers: Vec<String>,
+    pub workspaces: Vec<Workspace>,
+    pub first_day: String,
+    pub last_day: String,
+    pub first_timestamp: Option<i64>,
+    pub last_timestamp: Option<i64>,
+    pub days: Vec<String>,
+    pub tokens: i64,
+    pub message_count: i32,
+    pub cost: f64,
+    pub cost_is_complete: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InsightsReport {
+    pub days: Vec<DailyTotal>,
+    pub sessions: Vec<SessionSpend>,
+    pub models: Vec<ModelSpend>,
+    pub workspaces: Vec<Workspace>,
+    pub unassigned_cost: f64,
+}

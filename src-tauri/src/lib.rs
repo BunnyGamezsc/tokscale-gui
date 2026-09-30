@@ -30,6 +30,7 @@ mod accounts;
 mod commands;
 mod dto;
 mod gui;
+mod insights;
 mod machines;
 mod pricing;
 mod settings;
@@ -76,6 +77,7 @@ pub fn run() {
         .manage(machines::FleetState::default())
         .invoke_handler(tauri::generate_handler![
             commands::scan,
+            insights::insights_report,
             spending::spending_status,
             spending::request_spending_notifications,
             commands::model_report,

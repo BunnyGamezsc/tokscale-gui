@@ -1,5 +1,8 @@
 import { calendarSpan } from "@/lib/calendar";
 import { SpendingOverview } from "@/components/spending";
+import { ExpensiveSessions, PeriodSummaries, SessionDetail } from "@/components/insights";
+import { useState } from "react";
+import type { SessionSpend } from "@/lib/api";
 import {
   Table,
   TableBody,
@@ -21,6 +24,7 @@ export function OverviewView() {
   const report = useReport("model", snap.ready);
   const graph = useGraph(snap.ready);
   const dayDialog = useDayDialog(graph.data ?? []);
+  const [session, setSession] = useState<SessionSpend | null>(null);
 
   if (snap.gate) return snap.gate;
 
@@ -101,6 +105,9 @@ export function OverviewView() {
         </Table>
       </section>
 
+      <ExpensiveSessions ready={snap.ready} onSelect={setSession} />
+      <PeriodSummaries ready={snap.ready} />
+      {session && <SessionDetail session={session} onClose={() => setSession(null)} onDay={(day) => { setSession(null); dayDialog.open(day); }} />}
       {dayDialog.dialog}
     </>
   );

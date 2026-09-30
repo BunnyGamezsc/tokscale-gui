@@ -188,6 +188,44 @@ export interface SpendingStatus {
 export const spendingStatus = () => invoke<SpendingStatus>("spending_status");
 export const requestSpendingNotifications = () => invoke<string>("request_spending_notifications");
 
+export interface DailyTotal extends SpendingDay {
+  tokens: number;
+  messageCount: number;
+}
+
+export interface Workspace {
+  key: string;
+  label: string;
+}
+
+export interface SessionSpend {
+  client: string;
+  sessionId: string;
+  title: string | null;
+  models: string[];
+  providers: string[];
+  workspaces: Workspace[];
+  firstDay: string;
+  lastDay: string;
+  firstTimestamp: number | null;
+  lastTimestamp: number | null;
+  days: string[];
+  tokens: number;
+  messageCount: number;
+  cost: number;
+  costIsComplete: boolean;
+}
+
+export interface InsightsReport {
+  days: DailyTotal[];
+  sessions: SessionSpend[];
+  models: ModelSpend[];
+  workspaces: Workspace[];
+  unassignedCost: number;
+}
+
+export const insightsReport = (filter?: Filter) => invoke<InsightsReport>("insights_report", { filter });
+
 export interface MachineInfo {
   id: string;
   label: string;
