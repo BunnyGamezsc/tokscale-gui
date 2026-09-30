@@ -39,6 +39,9 @@ The Windows installer isn't code-signed yet, so SmartScreen shows "Windows prote
 - **Sync:** pulls Cursor, Antigravity and Trae usage into the local cache every view reads
 - **Accounts:** add, switch and remove Cursor and Codex accounts from Settings (⌘,)
 - **Report Filter:** narrow by client and date range, shared across all views
+- **App style:** choose Nocturne or Terminal in Settings; the choice persists across launches
+- **Machines (experimental):** encrypted fleet exchange and offline JSON import/export, with a
+  machine selector in the Report Filter. Two-machine exchange is not yet field-tested.
 - **Contribution Graph:** one year at a time, with a year picker and full keyboard access
 - **Manual pricing:** set rates for models that have usage but no price
 - **Cold first run:** the first scan reads every client's transcripts and takes about 21–40 s;

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
 import {
   createRootRoute,
   createRoute,
@@ -14,11 +15,11 @@ import { DailyView } from "@/views/daily";
 import { HourlyView } from "@/views/hourly";
 import { MinutelyView } from "@/views/minutely";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { applyAppearance, type Appearance } from "@/theme";
 import {
   intervalFromMinutes,
   MAX_REFRESH_MS,
   MIN_REFRESH_MS,
+  type AppStyle,
   type GuiSettings,
 } from "@/lib/settings";
 import { StatsView } from "@/views/stats";
@@ -31,6 +32,7 @@ import { isWindows } from "@/lib/platform";
 import { Modal } from "@/components/modal";
 import { SyncButton } from "@/components/sync";
 import { AccountsSettings } from "@/components/accounts";
+import { MachinesSettings } from "@/components/machines";
 import { useAutoRefresh, useGuiSettings, useRefresh } from "@/lib/use-scan";
 import * as api from "@/lib/api";
 
@@ -50,10 +52,8 @@ const NAV = [
   { path: "/pricing", label: "Pricing", component: PricingView },
 ] as const;
 
-/** The shell in the register ticket 07 settled: one flat plane, hairlines doing
- *  the separating, the active destination marked by an accent rule rather than a
- *  fill. The sidebar paints `--sidebar`, which is a translucent scrim so the
- *  NSVisualEffectView shows through it. */
+/** The live shell stays shared across both app styles, so navigation and Scan
+ *  controls continue to work whichever design the user selects. */
 function Shell() {
   const navigate = useNavigate();
   const refresh = useRefresh();
@@ -63,6 +63,10 @@ function Shell() {
   const mod = isWindows() ? "ctrl" : "meta";
   const { settings } = useGuiSettings();
   useAutoRefresh();
+
+  useEffect(() => {
+    document.documentElement.dataset.appStyle = settings.appStyle;
+  }, [settings.appStyle]);
 
   // The sidebar, the ⌘-digits and the sheet all read this, so hiding Minutely
   // renumbers all three together.
@@ -107,22 +111,25 @@ function Shell() {
   }, [navigate, refresh, nav, mod]);
 
   return (
-    <div className="flex h-full bg-background text-foreground">
-      <aside className="flex w-[180px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <div className="app-shell flex h-full bg-background text-foreground">
+      <aside className="app-sidebar flex w-[180px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
         {/* Reserves space for the overlaid traffic lights. See ticket 03:
             trafficLightPosition is creation-time only, so this must stay in
             sync with tauri.conf.json. */}
-        <div className="traffic-spacer h-11 shrink-0" data-tauri-drag-region />
+        <div className="traffic-spacer app-brand flex h-11 shrink-0 items-center" data-tauri-drag-region>
+          <span className="app-brand-mark" aria-hidden="true" />
+          <span>tokscale</span>
+        </div>
         <nav className="flex flex-col">
           {nav.map(({ path, label }) => (
             <Link
               key={path}
               to={path}
               activeOptions={{ exact: path === "/" }}
-              className="px-4 py-[6px] text-muted-foreground transition-colors duration-150 ease-out"
+              className="app-nav-link px-4 py-[6px] text-muted-foreground transition-colors duration-150 ease-out"
               activeProps={{
                 className:
-                  "px-4 py-[6px] font-medium text-foreground shadow-[inset_2px_0_0_var(--primary)]",
+                  "app-nav-link px-4 py-[6px] font-medium text-foreground shadow-[inset_2px_0_0_var(--primary)]",
               }}
             >
               {label}
@@ -165,16 +172,20 @@ function Shell() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto">
+      <main className="app-main flex min-w-0 flex-1 flex-col overflow-auto">
         {/* The Report Filter sits in the chrome, above every View. The drag
             region is its own element rather than the row: a titlebar drag
             swallows clicks on the controls otherwise. */}
-        <div className="flex h-11 w-full items-center gap-2 px-gutter">
+        <div className="app-topbar flex h-11 w-full shrink-0 items-center gap-2 px-gutter">
           <div className="h-full flex-1" data-tauri-drag-region />
           <FilterBar />
         </div>
-        <div className="px-gutter pb-8">
+        <div className="app-content flex-1 px-gutter pb-8">
           <Outlet />
+        </div>
+        <div className="app-status" aria-hidden="true">
+          <span>tokscale <b>·</b> {nav.find((n) => n.path === pathname)?.label ?? "Overview"}</span>
+          <span>terminal mode</span>
         </div>
       </main>
 
@@ -189,6 +200,41 @@ function Shell() {
 function Settings({ onClose }: { onClose: () => void }) {
   const { settings, save } = useGuiSettings();
   const [error, setError] = useState<string | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+  const [availableVersion, setAvailableVersion] = useState<string | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const checkForUpdates = async () => {
+    setCheckingUpdate(true);
+    setUpdateStatus(null);
+    try {
+      const version = await invoke<string | null>("check_for_updates");
+      setAvailableVersion(version);
+      // On macOS `check_for_updates` returns null after opening Sparkle's own
+      // window, so a flat "up to date" would lie about what happened.
+      setUpdateStatus(
+        version
+          ? `Version ${version} is available.`
+          : isWindows()
+            ? "You are up to date."
+            : "Sparkle opened its update window, or you are up to date.",
+      );
+    } catch (cause) {
+      setUpdateStatus(`Update check failed: ${String(cause)}`);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+  const installUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateStatus("Downloading update…");
+    try {
+      await invoke("install_update");
+      setUpdateStatus("Update installed. Restarting…");
+    } catch (cause) {
+      setUpdateStatus(`Update failed: ${String(cause)}`);
+      setCheckingUpdate(false);
+    }
+  };
   const saving = (patch: Partial<GuiSettings>) =>
     save(patch).then(
       () => setError(null),
@@ -200,19 +246,17 @@ function Settings({ onClose }: { onClose: () => void }) {
     <Modal title="Settings" onClose={onClose} className="w-[480px] max-w-[90vw]">
       <div className="px-4 py-2 text-small">
         <div className="flex items-center justify-between gap-4 border-b border-border/50 py-2.5">
-          <span>Appearance</span>
+          <span>App style</span>
           <Tabs
-            value={settings.appearance}
+            value={settings.appStyle}
             onValueChange={(v) => {
-              const appearance = v as Appearance;
-              void applyAppearance(appearance);
-              void saving({ appearance });
+              const appStyle = v as AppStyle;
+              void saving({ appStyle, appearance: "dark" });
             }}
           >
             <TabsList>
-              <TabsTrigger value="system">System</TabsTrigger>
-              <TabsTrigger value="light">Light</TabsTrigger>
-              <TabsTrigger value="dark">Dark</TabsTrigger>
+              <TabsTrigger value="nocturne">Nocturne</TabsTrigger>
+              <TabsTrigger value="terminal">Terminal</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -265,6 +309,18 @@ function Settings({ onClose }: { onClose: () => void }) {
         </label>
 
         <AccountsSettings />
+        <MachinesSettings />
+
+        <div className="border-t border-border/50 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <span>Updates</span>
+            <button type="button" disabled={checkingUpdate} onClick={() => void checkForUpdates()} className="rounded-sm border border-border px-2 py-1 disabled:opacity-50">
+              Check for updates
+            </button>
+          </div>
+          {availableVersion && <button type="button" disabled={checkingUpdate} onClick={() => void installUpdate()} className="mt-2 rounded-sm border border-border px-2 py-1 disabled:opacity-50">Install {availableVersion}</button>}
+          {updateStatus && <p role="status" className="mt-1.5 text-micro text-muted-foreground">{updateStatus}</p>}
+        </div>
 
         {error && <p className="pb-2 text-micro text-destructive">Not saved: {error}</p>}
       </div>

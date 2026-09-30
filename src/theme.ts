@@ -15,7 +15,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
  *  terminal — so the GUI neither reads nor writes it.
  */
 
-/** What the user chose. Stored in `gui.json` as `appearance`. */
+/** Legacy `gui.json` appearance values, kept for reading older settings files. */
 export type Appearance = "system" | "light" | "dark";
 
 /** Applies an appearance to both the window and the document.
@@ -37,29 +37,16 @@ export async function applyAppearance(appearance: Appearance): Promise<void> {
     appearance === "system" ? ((await window.theme()) ?? "light") : appearance;
 }
 
-/** Keeps the document in step while the appearance is "system" and macOS flips
- *  underneath us — the default appearance, so this is P1 behaviour rather than a
- *  nicety. It writes `data-theme` itself rather than handing a value back, so
- *  the "one place writes the theme" rule above has no exception. Listens to the
- *  *window's* theme rather than a media query, for the same reason
- *  `applyAppearance` does. Returns an unsubscribe. */
-function followSystem(): Promise<() => void> {
-  return getCurrentWindow().onThemeChanged(({ payload }) => {
-    document.documentElement.dataset.theme = payload;
-  });
-}
-
 /** Boot sequence. The window is created hidden (`visible: false` in
  *  tauri.conf.json) precisely so the first thing the user sees is already
  *  wearing the right NSAppearance — showing first and correcting after gives a
  *  visible flash of the wrong vibrancy. Rust shows the window anyway after a
  *  timeout, so a failure in here cannot leave the app windowless.
  *
- *  The caller reads `gui.json` first and passes its appearance in (#38), so the
- *  saved choice is known before the window shows, not after a render. */
-export async function initTheme(appearance: Appearance): Promise<void> {
-  await applyAppearance(appearance);
-  await followSystem();
+ *  Both selectable app styles have dark palettes, so the native window uses a
+ *  dark appearance too. The caller sets the saved style before showing it. */
+export async function initTheme(): Promise<void> {
+  await applyAppearance("dark");
   const window = getCurrentWindow();
   await window.show();
   // A window shown this late has to ask for focus; it does not get it for free

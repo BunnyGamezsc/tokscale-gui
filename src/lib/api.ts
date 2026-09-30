@@ -12,6 +12,7 @@ import type { GuiSettings } from "./settings";
  *  are displayed. */
 export interface Filter {
   clients?: string[];
+  machines?: string[];
   since?: string;
   until?: string;
   year?: string;
@@ -162,6 +163,36 @@ export const guiSettings = () => invoke<GuiSettings>("gui_settings");
 /** Saves and returns the settings as stored, interval clamped. */
 export const setGuiSettings = (settings: GuiSettings) =>
   invoke<GuiSettings>("set_gui_settings", { settings });
+
+export interface MachineInfo {
+  id: string;
+  label: string;
+  lastSeen: number | null;
+  local: boolean;
+}
+
+export interface MachinesStatus {
+  connected: boolean;
+  keyId: string | null;
+  machines: MachineInfo[];
+}
+
+export interface ImportSummary {
+  machines: number;
+  buckets: number;
+  messages: number;
+  cost: number;
+}
+
+export const machinesStatus = () => invoke<MachinesStatus>("machines_status");
+export const connectMachines = (secret: string) =>
+  invoke<string>("connect_machines", { secret });
+export const refreshMachines = () => invoke<ImportSummary>("refresh_machines");
+export const exportBuckets = () => invoke<string>("export_buckets");
+export const importBuckets = (files: string[]) =>
+  invoke<ImportSummary>("import_buckets", { files });
+export const removeMachine = (machineId: string) =>
+  invoke<void>("remove_machine", { machineId });
 
 /** Usage by agent, folded from the held Snapshot like `modelReport`. */
 export const agentsReport = (filter?: Filter) =>

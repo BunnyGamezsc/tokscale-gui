@@ -11,23 +11,43 @@
 use std::sync::Mutex;
 use std::time::Instant;
 
+#[cfg(test)]
+use tokscale_core::generate_local_graph_report;
 use tokscale_core::{
     aggregate_model_usage_entries_with_rollup, filter_messages_for_report,
-    generate_local_graph_report, model_report_token_totals,
-    parse_local_unified_messages_with_pricing, pricing::PricingService, BucketTimezone, ClientId,
-    GroupBy, LocalParseOptions, ReportOptions, UnifiedMessage, WorktreeRollup,
+    model_report_token_totals, parse_local_unified_messages_with_pricing, pricing::PricingService,
+    BucketTimezone, ClientId, GroupBy, LocalParseOptions, ReportOptions, UnifiedMessage,
+    WorktreeRollup,
 };
 
 use crate::dto::{
-    AgentRow, AgentsReport, Client, Day, Entry, HourSlot, HourlyReport, MinuteSlot,
-    MinutelyReport, Report, ScanSummary, Unpriced,
+    AgentRow, AgentsReport, Client, Day, Entry, HourSlot, HourlyReport, MinuteSlot, MinutelyReport,
+    Report, ScanSummary, Unpriced,
 };
+use crate::machines::FleetState;
 
 /// The Snapshot: the corpus of Unified Messages produced by one Scan, held for
 /// reports to be aggregated from. Replaced only by another Scan; it does not
 /// expire (CONTEXT.md: **Snapshot**).
 #[derive(Default)]
-pub struct Snapshot(pub Mutex<Option<Vec<UnifiedMessage>>>);
+pub struct Snapshot(pub Mutex<Option<SnapshotData>>);
+
+#[derive(Clone)]
+pub(crate) struct SnapshotData {
+    pub machine_id: String,
+    pub messages: Vec<UnifiedMessage>,
+}
+
+impl Snapshot {
+    pub(crate) fn local(&self) -> Result<SnapshotData, String> {
+        self.0
+            .lock()
+            .map_err(|_| "snapshot lock poisoned")?
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| "no snapshot: run a scan first".to_string())
+    }
+}
 
 /// The Report Filter: client, date-range and year constraints applied *before*
 /// aggregation. Narrowing it changes what each Entry means, not which Entries
@@ -45,6 +65,7 @@ pub struct Snapshot(pub Mutex<Option<Vec<UnifiedMessage>>>);
 #[serde(rename_all = "camelCase")]
 pub struct Filter {
     pub clients: Option<Vec<String>>,
+    pub machines: Option<Vec<String>>,
     pub since: Option<String>,
     pub until: Option<String>,
     pub year: Option<String>,
@@ -123,9 +144,29 @@ where
 
 /// The held Snapshot, cloned out from under the lock so the report commands
 /// can fold it inside `blocking` without holding the lock there.
-fn held(state: &Snapshot) -> Result<Vec<UnifiedMessage>, String> {
-    let guard = state.0.lock().map_err(|_| "snapshot lock poisoned")?;
-    Ok(guard.as_ref().ok_or("no snapshot: run a scan first")?.clone())
+fn held(
+    state: &Snapshot,
+    fleet: &FleetState,
+    filter: &Filter,
+) -> Result<Vec<UnifiedMessage>, String> {
+    let local = state.local()?;
+    let wants = |id: &str| {
+        filter
+            .machines
+            .as_ref()
+            .is_none_or(|ids| ids.iter().any(|want| want == id))
+    };
+    let mut messages = if wants(&local.machine_id) {
+        local.messages
+    } else {
+        Vec::new()
+    };
+    for document in fleet.documents()? {
+        if wants(&document.machine_id) {
+            messages.extend(crate::machines::messages_of(&document));
+        }
+    }
+    Ok(messages)
 }
 
 /// Walks every enabled Client's data locations and parses transcripts into
@@ -142,13 +183,14 @@ fn held(state: &Snapshot) -> Result<Vec<UnifiedMessage>, String> {
 #[tauri::command]
 pub async fn scan(
     state: tauri::State<'_, Snapshot>,
+    app: tauri::AppHandle,
     filter: Option<Filter>,
     force: Option<bool>,
 ) -> Result<ScanSummary, String> {
     if !force.unwrap_or(false) {
         let guard = state.0.lock().map_err(|_| "snapshot lock poisoned")?;
         if let Some(held) = guard.as_ref() {
-            return Ok(ScanSummary::of(held, 0));
+            return Ok(ScanSummary::of(&held.messages, 0));
         }
     }
 
@@ -160,13 +202,19 @@ pub async fn scan(
             .await?;
 
     let summary = ScanSummary::of(&messages, started.elapsed().as_millis() as u32);
-    *state.0.lock().map_err(|_| "snapshot lock poisoned")? = Some(messages);
+    let machine_id = crate::gui::load_settings(&crate::gui::settings_path(&app)?)?.machine_id;
+    *state.0.lock().map_err(|_| "snapshot lock poisoned")? = Some(SnapshotData {
+        machine_id,
+        messages,
+    });
     Ok(summary)
 }
 
 /// The Snapshot parse, pricing included — what `scan` runs, and what the two
 /// ignored probes below run so they measure the app's call rather than a copy.
-pub(crate) async fn priced_parse(options: LocalParseOptions) -> Result<Vec<UnifiedMessage>, String> {
+pub(crate) async fn priced_parse(
+    options: LocalParseOptions,
+) -> Result<Vec<UnifiedMessage>, String> {
     // A forced rescan re-reads the manual pricing overrides. The cached
     // service would not: it reads `custom-pricing.json` once per launch,
     // so a rate entered in this session would not show up until restart.
@@ -186,13 +234,14 @@ pub(crate) async fn priced_parse(options: LocalParseOptions) -> Result<Vec<Unifi
 #[tauri::command]
 pub async fn model_report(
     state: tauri::State<'_, Snapshot>,
+    fleet: tauri::State<'_, FleetState>,
     group_by: String,
     filter: Option<Filter>,
 ) -> Result<Report, String> {
     let group_by = parse_group_by(&group_by)?;
     let filter = filter.unwrap_or_default();
     let started = Instant::now();
-    let messages = held(&state)?;
+    let messages = held(&state, &fleet, &filter)?;
     blocking(move || Ok(report_of(messages, &group_by, &filter, started))).await
 }
 
@@ -229,11 +278,12 @@ fn report_of(
 #[tauri::command]
 pub async fn hourly_report(
     state: tauri::State<'_, Snapshot>,
+    fleet: tauri::State<'_, FleetState>,
     filter: Option<Filter>,
 ) -> Result<HourlyReport, String> {
     let filter = filter.unwrap_or_default();
     let started = Instant::now();
-    let messages = held(&state)?;
+    let messages = held(&state, &fleet, &filter)?;
     blocking(move || {
         let zone = BucketTimezone::from_scanner_settings(&crate::settings::scanner());
         Ok(hourly_of(messages, &filter, &zone, started))
@@ -316,11 +366,12 @@ fn hourly_of(
 #[tauri::command]
 pub async fn minutely_report(
     state: tauri::State<'_, Snapshot>,
+    fleet: tauri::State<'_, FleetState>,
     filter: Option<Filter>,
 ) -> Result<MinutelyReport, String> {
     let filter = filter.unwrap_or_default();
     let started = Instant::now();
-    let messages = held(&state)?;
+    let messages = held(&state, &fleet, &filter)?;
     blocking(move || {
         let zone = BucketTimezone::from_scanner_settings(&crate::settings::scanner());
         Ok(minutely_of(messages, &filter, &zone, started))
@@ -358,13 +409,15 @@ fn minutely_of(
 ) -> MinutelyReport {
     let slots: Vec<MinuteSlot> = slot_totals(messages, filter, |m| minute_of(m, zone))
         .into_iter()
-        .map(|((date, minute), (tokens, message_count, cost))| MinuteSlot {
-            date,
-            minute,
-            tokens,
-            message_count,
-            cost,
-        })
+        .map(
+            |((date, minute), (tokens, message_count, cost))| MinuteSlot {
+                date,
+                minute,
+                tokens,
+                message_count,
+                cost,
+            },
+        )
         .collect();
 
     MinutelyReport {
@@ -383,11 +436,12 @@ fn minutely_of(
 #[tauri::command]
 pub async fn agents_report(
     state: tauri::State<'_, Snapshot>,
+    fleet: tauri::State<'_, FleetState>,
     filter: Option<Filter>,
 ) -> Result<AgentsReport, String> {
     let filter = filter.unwrap_or_default();
     let started = Instant::now();
-    let messages = held(&state)?;
+    let messages = held(&state, &fleet, &filter)?;
     blocking(move || Ok(agents_of(messages, &filter, started))).await
 }
 
@@ -541,35 +595,38 @@ pub fn ramp_level(active: &[f64], cost: f64) -> u8 {
 /// Client re-colours every cell, and that is the bucketing telling the truth
 /// about the narrowed question.
 #[tauri::command]
-pub async fn graph_report(filter: Option<Filter>) -> Result<Vec<Day>, String> {
+pub async fn graph_report(
+    state: tauri::State<'_, Snapshot>,
+    fleet: tauri::State<'_, FleetState>,
+    filter: Option<Filter>,
+) -> Result<Vec<Day>, String> {
     let filter = filter.unwrap_or_default();
-
-    let result = blocking(move || {
-        tauri::async_runtime::block_on(generate_local_graph_report(
-            filter.report_options(GroupBy::Model),
-        ))
+    let messages = held(&state, &fleet, &filter)?;
+    blocking(move || {
+        let options = filter.report_options(GroupBy::Model);
+        let filtered = filter_messages_for_report(filter.narrow_clients(messages), &options);
+        let mut totals: std::collections::BTreeMap<String, (i64, f64)> = Default::default();
+        for message in filtered {
+            let total = totals.entry(message.date).or_default();
+            total.0 = total.0.saturating_add(message.tokens.total());
+            total.1 += message.cost;
+        }
+        let active: Vec<f64> = totals
+            .values()
+            .map(|(_, cost)| *cost)
+            .filter(|cost| *cost > 0.0)
+            .collect();
+        Ok(totals
+            .into_iter()
+            .map(|(date, (tokens, cost))| Day {
+                date,
+                level: ramp_level(&active, cost).max(u8::from(tokens > 0)),
+                cost,
+                tokens,
+            })
+            .collect())
     })
-    .await?;
-
-    let active: Vec<f64> = result
-        .contributions
-        .iter()
-        .map(|c| c.totals.cost)
-        .filter(|c| *c > 0.0)
-        .collect();
-
-    Ok(result
-        .contributions
-        .iter()
-        .map(|c| Day {
-            date: c.date.clone(),
-            // A day spent entirely on unpriced models costs $0 but is not
-            // absence (#29): it takes the bottom step rather than `--ramp-0`.
-            level: ramp_level(&active, c.totals.cost).max(u8::from(c.totals.tokens > 0)),
-            cost: c.totals.cost,
-            tokens: c.totals.tokens,
-        })
-        .collect())
+    .await
 }
 
 /// Every Client a Scan reads, by display name.
@@ -619,10 +676,11 @@ fn enabled_clients() -> Vec<String> {
 #[tauri::command]
 pub async fn clients(
     state: tauri::State<'_, Snapshot>,
+    fleet: tauri::State<'_, FleetState>,
     filter: Option<Filter>,
 ) -> Result<Vec<Client>, String> {
-    let messages = held(&state)?;
     let filter = filter.unwrap_or_default();
+    let messages = held(&state, &fleet, &filter)?;
     blocking(move || Ok(clients_of(messages, &filter))).await
 }
 
@@ -655,8 +713,11 @@ fn clients_of(messages: Vec<UnifiedMessage>, filter: &Filter) -> Vec<Client> {
 /// spent and the computed cost is still zero. That is exactly the set a manual
 /// rate is for.
 #[tauri::command]
-pub async fn unpriced(state: tauri::State<'_, Snapshot>) -> Result<Vec<Unpriced>, String> {
-    let messages = held(&state)?;
+pub async fn unpriced(
+    state: tauri::State<'_, Snapshot>,
+    fleet: tauri::State<'_, FleetState>,
+) -> Result<Vec<Unpriced>, String> {
+    let messages = held(&state, &fleet, &Filter::default())?;
     blocking(move || Ok(unpriced_of(messages))).await
 }
 
@@ -1227,13 +1288,23 @@ mod tests {
             let cost: f64 = slots.iter().map(|s| s.cost).sum();
             let tokens: i64 = slots.iter().map(|s| s.tokens).sum();
             let messages: i32 = slots.iter().map(|s| s.message_count).sum();
-            assert!((cost - day.totals.cost).abs() < 1e-9, "{}: {cost} vs {}", day.date, day.totals.cost);
+            assert!(
+                (cost - day.totals.cost).abs() < 1e-9,
+                "{}: {cost} vs {}",
+                day.date,
+                day.totals.cost
+            );
             assert_eq!(tokens, day.totals.tokens, "{}: tokens", day.date);
             assert_eq!(messages, day.totals.messages, "{}: messages", day.date);
         }
 
         let hours = |date: &str| -> Vec<Option<u8>> {
-            report.slots.iter().filter(|s| s.date == date).map(|s| s.hour).collect()
+            report
+                .slots
+                .iter()
+                .filter(|s| s.date == date)
+                .map(|s| s.hour)
+                .collect()
         };
         // In UTC these would be 02, 14, 15 and 15.
         assert_eq!(hours("2026-08-01"), vec![Some(11), Some(23)]);
@@ -1254,7 +1325,12 @@ mod tests {
         let mut disagreeing = at("claude-code", BEFORE_MIDNIGHT, 2.0);
         disagreeing.date = "2026-08-02".into(); // Seoul says 08-01
 
-        let report = hourly_of(vec![untimed, disagreeing], &Filter::default(), &seoul(), Instant::now());
+        let report = hourly_of(
+            vec![untimed, disagreeing],
+            &Filter::default(),
+            &seoul(),
+            Instant::now(),
+        );
         assert_eq!(report.slots.len(), 1, "one untimed slot, not a 00:00 one");
         let slot = &report.slots[0];
         assert_eq!((slot.date.as_str(), slot.hour), ("2026-08-02", None));
@@ -1288,11 +1364,24 @@ mod tests {
     /// minute rather than on a whole-hour guess.
     #[test]
     fn minutes_sum_to_the_day_in_the_bucket_timezone() {
-        let report = minutely_of(midnight_corpus(), &Filter::default(), &seoul(), Instant::now());
+        let report = minutely_of(
+            midnight_corpus(),
+            &Filter::default(),
+            &seoul(),
+            Instant::now(),
+        );
         let minutes = |date: &str| -> Vec<Option<u16>> {
-            report.slots.iter().filter(|s| s.date == date).map(|s| s.minute).collect()
+            report
+                .slots
+                .iter()
+                .filter(|s| s.date == date)
+                .map(|s| s.minute)
+                .collect()
         };
-        assert_eq!(minutes("2026-08-01"), vec![Some(11 * 60 + 59), Some(23 * 60 + 59)]);
+        assert_eq!(
+            minutes("2026-08-01"),
+            vec![Some(11 * 60 + 59), Some(23 * 60 + 59)]
+        );
         assert_eq!(minutes("2026-08-02"), vec![None, Some(0), Some(29)]);
         assert!((report.total_cost - 31.0).abs() < 1e-9);
         assert_eq!(report.total_messages, 5);
@@ -1322,7 +1411,11 @@ mod tests {
             let snapshot =
                 tauri::async_runtime::block_on(priced_parse(Filter::default().parse_options()))
                     .expect("scan");
-            println!("{label}: {} ms, {} messages", started.elapsed().as_millis(), snapshot.len());
+            println!(
+                "{label}: {} ms, {} messages",
+                started.elapsed().as_millis(),
+                snapshot.len()
+            );
             snapshot
         };
         scan("first scan in process");
@@ -1332,7 +1425,11 @@ mod tests {
         let zone = BucketTimezone::from_scanner_settings(&crate::settings::scanner());
         let started = Instant::now();
         let hourly = hourly_of(snapshot.clone(), &Filter::default(), &zone, started);
-        println!("hourly fold: {} ms, {} slots", started.elapsed().as_millis(), hourly.slots.len());
+        println!(
+            "hourly fold: {} ms, {} slots",
+            started.elapsed().as_millis(),
+            hourly.slots.len()
+        );
         let started = Instant::now();
         let minutely = minutely_of(snapshot, &Filter::default(), &zone, started);
         println!(
@@ -1382,7 +1479,10 @@ mod tests {
         for f in &filters {
             let agents = agents_of(agent_corpus(), f, Instant::now());
             let overview = report_of(agent_corpus(), &GroupBy::Model, f, Instant::now());
-            assert!((agents.total_cost - overview.total_cost).abs() < 1e-9, "{f:?}");
+            assert!(
+                (agents.total_cost - overview.total_cost).abs() < 1e-9,
+                "{f:?}"
+            );
             assert_eq!(agents.total_input, overview.total_input, "{f:?}");
             assert_eq!(agents.total_output, overview.total_output, "{f:?}");
             assert_eq!(agents.total_cache_read, overview.total_cache_read, "{f:?}");

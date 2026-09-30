@@ -24,6 +24,7 @@ import { DEFAULT_SETTINGS, type GuiSettings } from "./settings";
  *  window, read from trees that do not share a parent.
  */
 let force = false;
+let updateFleetAfterScan = false;
 let abandoned = false;
 const listeners = new Set<() => void>();
 
@@ -84,10 +85,11 @@ function lastRunSeconds(): number | null {
  *
  *  Nor during a sync (#40), which is writing files the Scan would read. A
  *  successful sync Refreshes when it finishes, so that Refresh isn't lost. */
-export function refreshScan(qc: QueryClient) {
+export function refreshScan(qc: QueryClient, updateFleet = false) {
   setAbandoned(false);
   if (qc.isFetching({ queryKey: ["scan"] }) || qc.isMutating({ mutationKey: ["sync"] })) return;
   force = true;
+  updateFleetAfterScan ||= updateFleet;
   void qc.invalidateQueries({ queryKey: ["scan"] });
 }
 
@@ -95,7 +97,7 @@ export function refreshScan(qc: QueryClient) {
 export function useRefresh() {
   const qc = useQueryClient();
   // Stable, because the shell hangs its `keydown` listener off it.
-  return useCallback(() => refreshScan(qc), [qc]);
+  return useCallback(() => refreshScan(qc, true), [qc]);
 }
 
 /** The Snapshot's lifecycle, as the views see it.
@@ -114,12 +116,24 @@ export function useScan() {
     queryKey: ["scan"],
     queryFn: async () => {
       const forced = force;
+      const updateFleet = updateFleetAfterScan;
       force = false;
+      updateFleetAfterScan = false;
       const summary = await api.scan(undefined, forced);
       rememberDuration(summary.elapsedMs);
       // The backend holds the new Snapshot by the time `scan` returns, so every
       // report read from the old one is refetched now, not at Refresh.
-      if (forced) void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== "scan" });
+      if (forced) {
+        void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== "scan" });
+        if (updateFleet) {
+          try {
+            await api.refreshMachines();
+            void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== "scan" });
+          } catch {
+            // Local Refresh still succeeds when Machines is disconnected or offline.
+          }
+        }
+      }
       return summary;
     },
     retry: false,
@@ -258,6 +272,10 @@ export function useGuiSettings() {
     [qc],
   );
   return { settings: data ?? DEFAULT_SETTINGS, save };
+}
+
+export function useMachinesStatus() {
+  return useQuery({ queryKey: ["machines_status"], queryFn: api.machinesStatus });
 }
 
 /** Interval refresh: a `refreshScan` on a timer, so a tick while a Scan is in

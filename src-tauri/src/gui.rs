@@ -19,6 +19,7 @@ use tauri::Manager;
 pub const DEFAULT_REFRESH_MS: u64 = 60_000;
 pub const MIN_REFRESH_MS: u64 = 30_000;
 pub const MAX_REFRESH_MS: u64 = 3_600_000;
+pub const DEFAULT_MACHINES_URL: &str = "https://tokscale-sync.bunnygamezsc.workers.dev";
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -29,22 +30,40 @@ pub enum Appearance {
     Dark,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AppStyle {
+    #[default]
+    Nocturne,
+    Terminal,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GuiSettings {
     pub appearance: Appearance,
+    pub app_style: AppStyle,
     pub auto_refresh_enabled: bool,
     pub auto_refresh_ms: u64,
     pub minutely_view_enabled: bool,
+    pub machine_id: String,
+    pub machine_label: String,
+    pub machines_base_url: String,
+    pub machines_key_id: Option<String>,
 }
 
 impl Default for GuiSettings {
     fn default() -> Self {
         Self {
             appearance: Appearance::System,
+            app_style: AppStyle::Nocturne,
             auto_refresh_enabled: false,
             auto_refresh_ms: DEFAULT_REFRESH_MS,
             minutely_view_enabled: false,
+            machine_id: String::new(),
+            machine_label: default_machine_label(),
+            machines_base_url: DEFAULT_MACHINES_URL.to_string(),
+            machines_key_id: None,
         }
     }
 }
@@ -59,11 +78,16 @@ pub fn settings_of(doc: &Value) -> GuiSettings {
     let d = GuiSettings::default();
     GuiSettings {
         appearance: pick(doc, "appearance").unwrap_or(d.appearance),
+        app_style: pick(doc, "appStyle").unwrap_or(d.app_style),
         auto_refresh_enabled: pick(doc, "autoRefreshEnabled").unwrap_or(d.auto_refresh_enabled),
         auto_refresh_ms: pick(doc, "autoRefreshMs")
             .unwrap_or(d.auto_refresh_ms)
             .clamp(MIN_REFRESH_MS, MAX_REFRESH_MS),
         minutely_view_enabled: pick(doc, "minutelyViewEnabled").unwrap_or(d.minutely_view_enabled),
+        machine_id: pick(doc, "machineId").unwrap_or(d.machine_id),
+        machine_label: pick(doc, "machineLabel").unwrap_or(d.machine_label),
+        machines_base_url: pick(doc, "machinesBaseUrl").unwrap_or(d.machines_base_url),
+        machines_key_id: pick(doc, "machinesKeyId").unwrap_or(d.machines_key_id),
     }
 }
 
@@ -76,7 +100,9 @@ pub fn with_settings(doc: Value, settings: &GuiSettings) -> Value {
         _ => Map::new(),
     };
     let normalized = GuiSettings {
-        auto_refresh_ms: settings.auto_refresh_ms.clamp(MIN_REFRESH_MS, MAX_REFRESH_MS),
+        auto_refresh_ms: settings
+            .auto_refresh_ms
+            .clamp(MIN_REFRESH_MS, MAX_REFRESH_MS),
         ..settings.clone()
     };
     if let Value::Object(known) = serde_json::to_value(normalized).expect("settings serialize") {
@@ -98,6 +124,31 @@ fn load(path: &Path) -> Value {
         .unwrap_or_else(|| Value::Object(Map::new()))
 }
 
+fn default_machine_label() -> String {
+    hostname::get()
+        .ok()
+        .and_then(|name| name.into_string().ok())
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| "This machine".to_string())
+}
+
+/// Loads settings and creates the stable local identity on its first read.
+pub(crate) fn load_settings(path: &Path) -> Result<GuiSettings, String> {
+    let doc = load(path);
+    let mut settings = settings_of(&doc);
+    let needs_save = settings.machine_id.is_empty();
+    if needs_save {
+        settings.machine_id = uuid::Uuid::new_v4().to_string();
+        let next = with_settings(doc, &settings);
+        crate::pricing::write_json(path, &next)?;
+    }
+    Ok(settings)
+}
+
+pub(crate) fn settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    path(app)
+}
+
 fn path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(app
         .path()
@@ -111,7 +162,7 @@ fn path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 #[tauri::command]
 pub async fn gui_settings(app: tauri::AppHandle) -> Result<GuiSettings, String> {
     let path = path(&app)?;
-    crate::commands::blocking(move || Ok(settings_of(&load(&path)))).await
+    crate::commands::blocking(move || load_settings(&path)).await
 }
 
 /// Saves the settings and returns them as stored, clamped.
@@ -122,6 +173,15 @@ pub async fn set_gui_settings(
 ) -> Result<GuiSettings, String> {
     let path = path(&app)?;
     crate::commands::blocking(move || {
+        let existing = load_settings(&path)?;
+        let settings = GuiSettings {
+            machine_id: if settings.machine_id.is_empty() {
+                existing.machine_id
+            } else {
+                settings.machine_id
+            },
+            ..settings
+        };
         let doc = with_settings(load(&path), &settings);
         crate::pricing::write_json(&path, &doc)?;
         Ok(settings_of(&doc))
@@ -137,8 +197,9 @@ mod tests {
     #[test]
     fn missing_keys_fall_back_to_the_defaults() {
         assert_eq!(settings_of(&json!({})), GuiSettings::default());
-        let s = settings_of(&json!({ "appearance": "dark" }));
+        let s = settings_of(&json!({ "appearance": "dark", "appStyle": "terminal" }));
         assert_eq!(s.appearance, Appearance::Dark);
+        assert_eq!(s.app_style, AppStyle::Terminal);
         assert!(!s.auto_refresh_enabled);
         assert!(!s.minutely_view_enabled);
     }
@@ -146,14 +207,18 @@ mod tests {
     /// One bad value costs that key, not the file.
     #[test]
     fn a_mistyped_key_costs_only_itself() {
-        let s = settings_of(&json!({ "appearance": "sepia", "minutelyViewEnabled": true }));
+        let s = settings_of(&json!({ "appearance": "sepia", "appStyle": "sepia", "minutelyViewEnabled": true }));
         assert_eq!(s.appearance, Appearance::System);
+        assert_eq!(s.app_style, AppStyle::Nocturne);
         assert!(s.minutely_view_enabled);
     }
 
     #[test]
     fn an_out_of_range_interval_is_clamped() {
-        assert_eq!(settings_of(&json!({ "autoRefreshMs": 1 })).auto_refresh_ms, MIN_REFRESH_MS);
+        assert_eq!(
+            settings_of(&json!({ "autoRefreshMs": 1 })).auto_refresh_ms,
+            MIN_REFRESH_MS
+        );
         assert_eq!(
             settings_of(&json!({ "autoRefreshMs": 86_400_000u64 })).auto_refresh_ms,
             MAX_REFRESH_MS
@@ -167,17 +232,20 @@ mod tests {
             doc,
             &GuiSettings {
                 appearance: Appearance::Dark,
+                app_style: AppStyle::Terminal,
                 auto_refresh_ms: 5,
                 ..Default::default()
             },
         );
         assert_eq!(out["fromANewerBuild"], json!([1, 2]));
         assert_eq!(out["appearance"], "dark");
+        assert_eq!(out["appStyle"], "terminal");
         assert_eq!(out["autoRefreshMs"], MIN_REFRESH_MS);
     }
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("tokscale-gui-gui-{}-{name}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("tokscale-gui-gui-{}-{name}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir.join("gui.json")
     }

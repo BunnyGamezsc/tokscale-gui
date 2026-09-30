@@ -103,6 +103,11 @@ Clients, and it shows in the Views only after the Refresh that follows it. A pro
 **not set up** when there is nothing to sync from: no Cursor or Trae login, or Antigravity
 not running.
 
+**Machines / Fleet** — daily aggregate usage shared between a user's computers. Each
+machine encrypts its own buckets before uploading them to the dumb storage server; the
+secret stays in the OS keychain. This is not Sync: Machines combines report data from
+separate computers, while Sync fills a local Client Source from its provider.
+
 **Default Clients** — upstream's persisted `defaultClients` in `settings.json`. Despite
 the name it is neither of the above two: `build_client_filter` uses it as the default for
 the CLI's `--client` flags when none are passed, so it is a *report-time* default that

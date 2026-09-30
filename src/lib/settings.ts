@@ -1,11 +1,18 @@
 import type { Appearance } from "@/theme";
 
+export type AppStyle = "nocturne" | "terminal";
+
 /** What `gui.json` holds, as `gui_settings` returns it (`src-tauri/src/gui.rs`). */
 export interface GuiSettings {
   appearance: Appearance;
+  appStyle: AppStyle;
   autoRefreshEnabled: boolean;
   autoRefreshMs: number;
   minutelyViewEnabled: boolean;
+  machineId: string;
+  machineLabel: string;
+  machinesBaseUrl: string;
+  machinesKeyId: string | null;
 }
 
 /** Interval refresh bounds, in step with `gui.rs`. A tick is a forced Scan;
@@ -15,9 +22,14 @@ export const MAX_REFRESH_MS = 3_600_000;
 
 export const DEFAULT_SETTINGS: GuiSettings = {
   appearance: "system",
+  appStyle: "nocturne",
   autoRefreshEnabled: false,
   autoRefreshMs: 60_000,
   minutelyViewEnabled: false,
+  machineId: "",
+  machineLabel: "This machine",
+  machinesBaseUrl: "https://tokscale-sync.bunnygamezsc.workers.dev",
+  machinesKeyId: null,
 };
 
 /** An interval typed in minutes, as milliseconds within the bounds. Anything

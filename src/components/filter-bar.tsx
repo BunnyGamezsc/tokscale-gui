@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useScanLanded, useAllClients } from "@/lib/use-scan";
+import { useScanLanded, useAllClients, useMachinesStatus } from "@/lib/use-scan";
 import { useFilter, setFilter, clearFilter, isNarrowed } from "@/lib/filter";
 
 /** The Report Filter, in the window chrome.
@@ -26,14 +26,25 @@ export function FilterBar() {
   const ready = useScanLanded();
   const filter = useFilter();
   const clients = useAllClients(ready);
+  const machines = useMachinesStatus();
 
   if (!ready) return null;
 
   const picked = filter.clients ?? [];
+  const pickedMachines = filter.machines ?? [];
+  const pickedSet = new Set(picked);
+  const pickedMachineSet = new Set(pickedMachines);
   const toggle = (id: string) =>
     setFilter({
       ...filter,
-      clients: picked.includes(id) ? picked.filter((c) => c !== id) : [...picked, id],
+      clients: pickedSet.has(id) ? picked.filter((c) => c !== id) : [...picked, id],
+    });
+  const toggleMachine = (id: string) =>
+    setFilter({
+      ...filter,
+      machines: pickedMachineSet.has(id)
+        ? pickedMachines.filter((machine) => machine !== id)
+        : [...pickedMachines, id],
     });
 
   return (
@@ -61,6 +72,26 @@ export function FilterBar() {
       />
 
       <Picker
+        label={pickedMachines.length ? `${pickedMachines.length} machines` : "All machines"}
+        ariaLabel="Machines to report on"
+      >
+        {(machines.data?.machines ?? []).map((machine) => (
+          <label
+            key={machine.id}
+            className="flex cursor-pointer items-center gap-2 rounded-[3px] px-1.5 py-1 hover:bg-muted"
+          >
+            <input
+              type="checkbox"
+              checked={pickedMachineSet.has(machine.id)}
+              onChange={() => toggleMachine(machine.id)}
+              className="accent-[var(--primary)]"
+            />
+            <span className="min-w-0 truncate font-mono">{machine.label}</span>
+          </label>
+        ))}
+      </Picker>
+
+      <Picker
         label={picked.length ? `${picked.length} clients` : "All clients"}
         ariaLabel="Clients to report on"
       >
@@ -81,7 +112,7 @@ export function FilterBar() {
                 places the accent is spent. */}
             <input
               type="checkbox"
-              checked={picked.includes(c.id)}
+              checked={pickedSet.has(c.id)}
               onChange={() => toggle(c.id)}
               className="accent-[var(--primary)]"
             />

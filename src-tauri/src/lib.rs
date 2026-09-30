@@ -30,10 +30,12 @@ mod accounts;
 mod commands;
 mod dto;
 mod gui;
+mod machines;
 mod pricing;
 mod settings;
 mod sync;
 mod usage;
+mod updates;
 mod vendor;
 
 /// How long the backend waits for the frontend to show the window itself.
@@ -46,7 +48,13 @@ pub fn run() {
     // Vendor CLIs the fork spawns resolve through `vendor` (ADR 0006, 0007).
     tokscale_cli::spawn::set_resolver(vendor::for_spawn);
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_plugin_sparkle_updater::init());
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
+    builder
         .setup(|app| {
             let window = app
                 .get_webview_window("main")
@@ -64,6 +72,7 @@ pub fn run() {
             Ok(())
         })
         .manage(commands::Snapshot::default())
+        .manage(machines::FleetState::default())
         .invoke_handler(tauri::generate_handler![
             commands::scan,
             commands::model_report,
@@ -88,6 +97,14 @@ pub fn run() {
             accounts::codex_activity,
             gui::gui_settings,
             gui::set_gui_settings,
+            machines::export_buckets,
+            machines::import_buckets,
+            machines::connect_machines,
+            machines::machines_status,
+            machines::remove_machine,
+            machines::refresh_machines,
+            updates::check_for_updates,
+            updates::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
