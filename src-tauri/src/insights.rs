@@ -160,6 +160,52 @@ pub async fn insights_report(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "reads this machine's real transcripts; emits only aggregate totals"]
+    fn real_feature_projections_agree() {
+        let messages = tauri::async_runtime::block_on(crate::commands::priced_parse(
+            Filter::default().parse_options(),
+        ))
+        .unwrap();
+        let count = messages.len();
+        let entries = tokscale_core::aggregate_model_usage_entries_with_rollup(
+            messages.clone(),
+            &GroupBy::ClientProviderModel,
+            tokscale_core::WorktreeRollup::default(),
+        );
+        let cost: f64 = entries.iter().map(|e| e.cost).sum();
+        let summary = crate::dto::ScanSummary::of(&messages, 0);
+        let zone =
+            tokscale_core::BucketTimezone::from_scanner_settings(&crate::settings::scanner());
+        let spending = crate::spending::status_of(
+            &messages,
+            zone.day_key(chrono::Utc::now().timestamp_millis()),
+        );
+        let report = report_of(messages, &Filter::default());
+        let daily: f64 = report.days.iter().map(|d| d.cost).sum();
+        let sessions: f64 =
+            report.sessions.iter().map(|s| s.cost).sum::<f64>() + report.unassigned_cost;
+        assert!((cost - daily).abs() < 0.000001);
+        assert!((cost - sessions).abs() < 0.000001);
+        assert!((cost - spending.days.iter().map(|d| d.cost).sum::<f64>()).abs() < 0.000001);
+        if let Ok(path) = std::env::var("TOKSCALE_SMOKE_FIXTURE") {
+            let (total_input, total_output, total_cache_read, _) =
+                tokscale_core::model_report_token_totals(&entries);
+            let model = crate::dto::Report {
+                entries: entries.iter().map(crate::dto::Entry::from).collect(),
+                total_input,
+                total_output,
+                total_cache_read,
+                total_messages: report.days.iter().map(|d| d.message_count).sum(),
+                total_cost: cost,
+                elapsed_ms: 0,
+            };
+            let fixture = serde_json::json!({"scan": summary, "insights_report": report, "spending_status": spending, "model_report": model});
+            std::fs::write(path, serde_json::to_vec(&fixture).unwrap()).unwrap();
+        }
+        println!("Validated {count} messages, {} days and {} sessions; total cost ${cost:.2}; all three projections agree", report.days.len(), report.sessions.len());
+    }
     fn msg(client: &str, session: &str, model: &str, day: &str, cost: f64) -> UnifiedMessage {
         UnifiedMessage {
             client: client.into(),

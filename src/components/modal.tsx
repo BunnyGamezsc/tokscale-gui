@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 
 /** The native `<dialog>`, opened modally.
  *
@@ -27,15 +27,23 @@ export function Modal({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
-    ref.current?.showModal();
+    const dialog = ref.current;
+    dialog?.showModal();
+    return () => dialog?.close();
   }, []);
 
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      aria-labelledby={titleId}
+      // StrictMode closes and reopens the dialog while replaying effects. Its
+      // queued close event must not dismiss the newly reopened dialog.
+      onClose={() => {
+        if (!ref.current?.open) onClose();
+      }}
       onClick={(e) => {
         // Backdrop clicks land on the dialog itself, never on its content.
         if (e.target === ref.current) ref.current?.close();
@@ -45,8 +53,17 @@ export function Modal({
       className={`m-auto rounded-md border border-border bg-background p-0 text-foreground shadow-lg backdrop:bg-black/25 ${className}`}
     >
       <header className="flex items-baseline justify-between border-b border-border px-4 py-3">
-        <h2 className="text-small font-semibold">{title}</h2>
-        {aside && <span className="tnum font-mono text-small text-muted-foreground">{aside}</span>}
+        <h2
+          id={titleId}
+          className="min-w-0 break-words text-small font-semibold"
+        >
+          {title}
+        </h2>
+        {aside && (
+          <span className="tnum font-mono text-small text-muted-foreground">
+            {aside}
+          </span>
+        )}
       </header>
       {children}
     </dialog>

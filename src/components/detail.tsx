@@ -53,10 +53,11 @@ export function drillMatch(groupBy: GroupBy, row: Entry | null) {
 
 const FINER: GroupBy = "client,provider,model";
 
-function useDayDetail(date: string | null) {
+function useDayDetail(date: string | null, override?: api.Filter) {
   // The active Report Filter still applies — the dialog has to equal the Daily
   // row it opened from, and that row is narrowed. Only the range is replaced.
-  const filter = useFilter();
+  const activeFilter = useFilter();
+  const filter = override ?? activeFilter;
   return useQuery({
     queryKey: ["model_report", FINER, filter, date],
     queryFn: () => api.modelReport(FINER, { ...filter, since: date!, until: date! }),
@@ -73,9 +74,9 @@ function useDayDetail(date: string | null) {
  *  dialog exists to keep — the total equals the figure on what opened it — and
  *  `days` is what carries that figure.
  */
-export function useDayDialog(days: Day[]) {
+export function useDayDialog(days: Day[], filter?: api.Filter, onClose?: () => void) {
   const [day, setDay] = useState<string | null>(null);
-  const detail = useDayDetail(day);
+  const detail = useDayDetail(day, filter);
   const opened = days.find((d) => d.date === day);
 
   return {
@@ -86,7 +87,7 @@ export function useDayDialog(days: Day[]) {
         aside={opened ? fmtCost(opened.cost) : ""}
         entries={detail.data?.entries ?? []}
         pending={detail.isPending}
-        onClose={() => setDay(null)}
+        onClose={() => { setDay(null); onClose?.(); }}
       />
     ),
   };

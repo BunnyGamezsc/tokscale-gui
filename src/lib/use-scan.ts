@@ -202,7 +202,7 @@ function useDelayPassed(active: boolean, ms: number) {
  *  `force` flag that could swallow a Refresh. */
 export function useScanLanded() {
   const { data } = useQuery<api.ScanSummary>({ queryKey: ["scan"], queryFn: skipToken });
-  return Boolean(data && data.messages > 0);
+  return Boolean(data);
 }
 
 /** Reports read from the held Snapshot. They cannot run until a Scan has landed,

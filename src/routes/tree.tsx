@@ -34,6 +34,8 @@ import { SyncButton } from "@/components/sync";
 import { AccountsSettings } from "@/components/accounts";
 import { MachinesSettings } from "@/components/machines";
 import { SpendingSettings } from "@/components/spending";
+import { SearchPalette, SearchInspector } from "@/components/search";
+import type { SearchTarget } from "@/lib/search";
 import { useAutoRefresh, useGuiSettings, useRefresh, useScanLanded, useSpendingStatus } from "@/lib/use-scan";
 import * as api from "@/lib/api";
 
@@ -61,6 +63,8 @@ function Shell() {
   const [help, setHelp] = useState(false);
   const [clis, setClis] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
   const mod = isWindows() ? "ctrl" : "meta";
   const { settings } = useGuiSettings();
   useAutoRefresh();
@@ -100,6 +104,7 @@ function Shell() {
       if (action.kind === "refresh") refresh();
       else if (action.kind === "help") setHelp(true);
       else if (action.kind === "settings") setSettingsOpen(true);
+      else if (action.kind === "search") setSearchOpen(true);
       else {
         // Bounds-checked here because `keys.ts` does not know the sidebar.
         const destination = nav[action.index];
@@ -123,6 +128,7 @@ function Shell() {
           <span>tokscale</span>
         </div>
         <nav className="flex flex-col">
+          <button className="flex items-center justify-between px-4 py-2 text-small text-muted-foreground hover:text-foreground" onClick={() => setSearchOpen(true)}>Search<kbd className="font-mono text-micro">{modLabel(mod)}K</kbd></button>
           {nav.map(({ path, label }) => (
             <Link
               key={path}
@@ -194,6 +200,8 @@ function Shell() {
       {help && <Shortcuts destinations={nav.map((n) => n.label)} onClose={() => setHelp(false)} />}
       {clis && <VendorClis onClose={() => setClis(false)} />}
       {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
+      {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} onSelect={(target) => { setSearchOpen(false); setSearchTarget(target); }} />}
+      {searchTarget && <SearchInspector target={searchTarget} onClose={() => setSearchTarget(null)} />}
     </div>
   );
 }

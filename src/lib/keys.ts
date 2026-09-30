@@ -26,6 +26,7 @@ export type Action =
   | { kind: "refresh" }
   | { kind: "help" }
   | { kind: "settings" }
+  | { kind: "search" }
   /** Zero-based, into the sidebar's destinations in the order it draws them.
    *  Unbounded here: the caller owns the list, so it owns the bounds check. */
   | { kind: "nav"; index: number };
@@ -73,6 +74,7 @@ export function resolve(e: KeyLike, typing: boolean, mod: Mod): Action | null {
   // Ctrl is Windows' ⌘. The other one is refused below, as ⌃ always was on macOS.
   const modDown = mod === "meta" ? e.metaKey : e.ctrlKey;
   if (modDown) {
+    if (e.code === "KeyK" && !e.shiftKey && !(mod === "meta" ? e.ctrlKey : e.metaKey)) return { kind: "search" };
     // ⌘, is every macOS app's Settings. Matched on `key`, like `?`: the sheet
     // advertises the character.
     if (e.key === ",") return { kind: "settings" };
@@ -111,6 +113,7 @@ export function bindings(destinations: readonly string[], mod: Mod): { keys: str
     { keys: "R", label: "Refresh — re-reads every client's transcripts from disk, taking seconds" },
     { keys: "?", label: "Show this list" },
     { keys: `${k},`, label: "Settings" },
+    { keys: `${k}K`, label: "Search models, workspaces and chats" },
     { keys: "Tab", label: "Move focus. Enter or Space activates what it lands on" },
     { keys: "↓ ↑", label: "Contribution graph: next and previous day" },
     { keys: "→ ←", label: "Contribution graph: next and previous week" },

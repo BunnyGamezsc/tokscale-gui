@@ -13,6 +13,14 @@ const press = (e: Partial<KeyLike>): KeyLike => ({
 
 const DESTINATIONS = ["Overview", "Models", "Daily", "Stats", "Pricing"];
 
+test("search uses the platform modifier even while typing", () => {
+  expect(resolve(press({ code: "KeyK", metaKey: true }), true, "meta")).toEqual({ kind: "search" });
+  expect(resolve(press({ code: "KeyK", ctrlKey: true }), true, "ctrl")).toEqual({ kind: "search" });
+  expect(resolve(press({ code: "KeyK", ctrlKey: true }), false, "meta")).toBeNull();
+  expect(resolve(press({ code: "KeyK", metaKey: true, shiftKey: true }), false, "meta")).toBeNull();
+  expect(bindings(DESTINATIONS, "ctrl").some((b) => b.keys === "Ctrl+K")).toBe(true);
+});
+
 test("the destinations are reachable by their number", () => {
   expect(resolve(press({ code: "Digit1", metaKey: true }), false, "meta")).toEqual({ kind: "nav", index: 0 });
   expect(resolve(press({ code: "Digit5", metaKey: true }), false, "meta")).toEqual({ kind: "nav", index: 4 });

@@ -27,7 +27,7 @@ fn crossed(spent: f64, limit: f64, fired: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-fn status_of(messages: &[UnifiedMessage], today: String) -> SpendingStatus {
+pub(crate) fn status_of(messages: &[UnifiedMessage], today: String) -> SpendingStatus {
     let month = &today[..7];
     let mut days: BTreeMap<String, (f64, bool)> = BTreeMap::new();
     // Include all known pairs, even those with no spending this month, for the picker.
@@ -157,6 +157,15 @@ pub async fn spending_status(app: tauri::AppHandle) -> Result<SpendingStatus, St
         let zone = BucketTimezone::from_scanner_settings(&crate::settings::scanner());
         let today = zone.day_key(chrono::Utc::now().timestamp_millis());
         let mut status = status_of(&messages, today);
+        let today_total = status.days.iter().find(|d| d.date == status.today);
+        if let Err(error) = crate::tray::update(
+            &app,
+            &status.today,
+            today_total.map_or(0.0, |d| d.cost),
+            today_total.is_none_or(|d| d.cost_is_complete),
+        ) {
+            eprintln!("spending tray update failed: {error}");
+        }
         status.notification_permission = app
             .notification()
             .permission_state()

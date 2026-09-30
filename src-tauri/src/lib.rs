@@ -36,6 +36,7 @@ mod pricing;
 mod settings;
 mod spending;
 mod sync;
+mod tray;
 mod updates;
 mod usage;
 mod vendor;
@@ -58,6 +59,7 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            tray::setup(app)?;
             let window = app
                 .get_webview_window("main")
                 .expect("main window is declared in tauri.conf.json");
@@ -72,6 +74,17 @@ pub fn run() {
                 }
             });
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (window, event);
         })
         .manage(commands::Snapshot::default())
         .manage(machines::FleetState::default())
