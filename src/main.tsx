@@ -38,8 +38,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 );
 
 // The window is created hidden so its NSAppearance is right before the first
-// frame; this reads `gui.json`, sets the selected style and its dark window
-// theme, and only then shows it. A small
+// frame; this reads `gui.json`, sets the selected style and appearance,
+// and only then shows it. A small
 // file read, well inside Rust's 1500 ms fallback. The settings seed the query
 // cache so the shell never renders with a guess.
 void api
@@ -48,5 +48,5 @@ void api
   .then((settings) => {
     queryClient.setQueryData(["gui_settings"], settings);
     document.documentElement.dataset.appStyle = settings.appStyle;
-    return initTheme();
+    return initTheme(settings.appearance);
   });

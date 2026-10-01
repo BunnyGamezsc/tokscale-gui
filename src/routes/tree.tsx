@@ -15,6 +15,7 @@ import { DailyView } from "@/views/daily";
 import { HourlyView } from "@/views/hourly";
 import { MinutelyView } from "@/views/minutely";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { applyAppearance, type Appearance } from "@/theme";
 import {
   intervalFromMinutes,
   MAX_REFRESH_MS,
@@ -55,7 +56,7 @@ const NAV = [
   { path: "/pricing", label: "Pricing", component: PricingView },
 ] as const;
 
-/** The live shell stays shared across both app styles, so navigation and Scan
+/** The live shell stays shared across all app styles, so navigation and Scan
  *  controls continue to work whichever design the user selects. */
 function Shell() {
   const navigate = useNavigate();
@@ -123,9 +124,16 @@ function Shell() {
         {/* Reserves space for the overlaid traffic lights. See ticket 03:
             trafficLightPosition is creation-time only, so this must stay in
             sync with tauri.conf.json. */}
-        <div className="traffic-spacer app-brand flex h-11 shrink-0 items-center" data-tauri-drag-region>
-          <span className="app-brand-mark" aria-hidden="true" />
-          <span>tokscale</span>
+        <div
+          className={`traffic-spacer h-11 shrink-0 ${settings.appStyle === "original" ? "" : "app-brand flex items-center"}`}
+          data-tauri-drag-region
+        >
+          {settings.appStyle !== "original" && (
+            <>
+              <span className="app-brand-mark" aria-hidden="true" />
+              <span>tokscale</span>
+            </>
+          )}
         </div>
         <nav className="flex flex-col">
           <button className="flex items-center justify-between px-4 py-2 text-small text-muted-foreground hover:text-foreground" onClick={() => setSearchOpen(true)}>Search<kbd className="font-mono text-micro">{modLabel(mod)}K</kbd></button>
@@ -246,10 +254,12 @@ function Settings({ onClose }: { onClose: () => void }) {
     }
   };
   const saving = (patch: Partial<GuiSettings>) =>
-    save(patch).then(
-      () => setError(null),
-      (e) => setError(String(e)),
-    );
+    save(patch)
+      .then(async () => {
+        if (patch.appearance) await applyAppearance(patch.appearance);
+        setError(null);
+      })
+      .catch((e) => setError(String(e)));
   const minutes = settings.autoRefreshMs / 60_000;
 
   return (
@@ -261,12 +271,24 @@ function Settings({ onClose }: { onClose: () => void }) {
             value={settings.appStyle}
             onValueChange={(v) => {
               const appStyle = v as AppStyle;
-              void saving({ appStyle, appearance: "dark" });
+              void saving({ appStyle });
             }}
           >
             <TabsList>
+              <TabsTrigger value="original">Original</TabsTrigger>
               <TabsTrigger value="nocturne">Nocturne</TabsTrigger>
               <TabsTrigger value="terminal">Terminal</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 border-b border-border/50 py-2.5">
+          <span>Appearance</span>
+          <Tabs value={settings.appearance} onValueChange={(v) => void saving({ appearance: v as Appearance })}>
+            <TabsList>
+              <TabsTrigger value="system">System</TabsTrigger>
+              <TabsTrigger value="light">Light</TabsTrigger>
+              <TabsTrigger value="dark">Dark</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>

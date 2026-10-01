@@ -56,6 +56,7 @@ pub enum Appearance {
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AppStyle {
+    Original,
     #[default]
     Nocturne,
     Terminal,
@@ -300,6 +301,26 @@ mod tests {
         assert_eq!(out["appearance"], "dark");
         assert_eq!(out["appStyle"], "terminal");
         assert_eq!(out["autoRefreshMs"], MIN_REFRESH_MS);
+    }
+
+    #[test]
+    fn every_style_and_appearance_round_trips_independently_on_disk() {
+        let path = temp("styles");
+        for app_style in [AppStyle::Original, AppStyle::Nocturne, AppStyle::Terminal] {
+            for appearance in [Appearance::System, Appearance::Light, Appearance::Dark] {
+                let settings = GuiSettings {
+                    app_style,
+                    appearance,
+                    ..Default::default()
+                };
+                let doc = with_settings(json!({ "warningHistory": ["preserved"] }), &settings);
+                crate::pricing::write_json(&path, &doc).unwrap();
+                let loaded = load(&path);
+                assert_eq!(settings_of(&loaded), settings);
+                assert_eq!(loaded["warningHistory"], json!(["preserved"]));
+            }
+        }
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
     }
 
     fn temp(name: &str) -> PathBuf {

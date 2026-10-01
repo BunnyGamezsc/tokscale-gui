@@ -1,6 +1,6 @@
 import type { Appearance } from "@/theme";
 
-export type AppStyle = "nocturne" | "terminal";
+export type AppStyle = "original" | "nocturne" | "terminal";
 
 /** What `gui.json` holds, as `gui_settings` returns it (`src-tauri/src/gui.rs`). */
 export interface GuiSettings {

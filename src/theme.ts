@@ -15,8 +15,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
  *  terminal — so the GUI neither reads nor writes it.
  */
 
-/** Legacy `gui.json` appearance values, kept for reading older settings files. */
+/** What the user chose. Stored independently of app style in `gui.json`. */
 export type Appearance = "system" | "light" | "dark";
+
+let currentAppearance: Appearance = "system";
 
 /** Applies an appearance to both the window and the document.
  *
@@ -31,10 +33,19 @@ export type Appearance = "system" | "light" | "dark";
  *  pin, "system" could only ever resolve to dark, whatever the machine was set
  *  to. The pin existed because there was no runtime switch; there is one now. */
 export async function applyAppearance(appearance: Appearance): Promise<void> {
+  currentAppearance = appearance;
   const window = getCurrentWindow();
   await window.setTheme(appearance === "system" ? null : appearance);
-  document.documentElement.dataset.theme =
-    appearance === "system" ? ((await window.theme()) ?? "light") : appearance;
+  const theme = appearance === "system" ? ((await window.theme()) ?? "light") : appearance;
+  if (currentAppearance === appearance) document.documentElement.dataset.theme = theme;
+}
+
+/** Follow native theme events only while System is selected. Explicit Light
+ *  and Dark choices must survive a later OS appearance change. */
+function followSystem(): Promise<() => void> {
+  return getCurrentWindow().onThemeChanged(({ payload }) => {
+    if (currentAppearance === "system") document.documentElement.dataset.theme = payload;
+  });
 }
 
 /** Boot sequence. The window is created hidden (`visible: false` in
@@ -43,10 +54,11 @@ export async function applyAppearance(appearance: Appearance): Promise<void> {
  *  visible flash of the wrong vibrancy. Rust shows the window anyway after a
  *  timeout, so a failure in here cannot leave the app windowless.
  *
- *  Both selectable app styles have dark palettes, so the native window uses a
- *  dark appearance too. The caller sets the saved style before showing it. */
-export async function initTheme(): Promise<void> {
-  await applyAppearance("dark");
+ *  The caller sets the saved style and passes its independent appearance
+ *  before showing the window. */
+export async function initTheme(appearance: Appearance): Promise<void> {
+  await applyAppearance(appearance);
+  await followSystem();
   const window = getCurrentWindow();
   await window.show();
   // A window shown this late has to ask for focus; it does not get it for free
