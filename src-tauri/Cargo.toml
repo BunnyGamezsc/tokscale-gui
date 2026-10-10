@@ -1,6 +1,6 @@
 [package]
 name = "tokscale-gui"
-version = "1.3.1"
+version = "1.3.2"
 edition = "2021"
 license = "MIT"
 # Measured, not guessed: `cargo +1.88 check --locked` builds, and 1.88 is the
@@ -42,8 +42,8 @@ tauri-plugin-notification = "=2.4.0"
 # survives a missing submodule checkout, and overridden below to the submodule
 # working tree so day-to-day work edits real files rather than a cargo cache
 # clone. Bump both the tag here and the submodule when the fork moves.
-tokscale-core = { git = "https://github.com/BunnyGamezsc/tokscale.git", tag = "gui-v4.15.1-lib.6" }
-tokscale-cli = { git = "https://github.com/BunnyGamezsc/tokscale.git", tag = "gui-v4.15.1-lib.6" }
+tokscale-core = { git = "https://github.com/BunnyGamezsc/tokscale.git", tag = "gui-v4.18.0-lib.1" }
+tokscale-cli = { git = "https://github.com/BunnyGamezsc/tokscale.git", tag = "gui-v4.18.0-lib.1" }
 
 # Redirects the git dependency above to the vendored submodule. Cargo matches a
 # `[patch]` entry by source URL + package name, so the URL must be spelled

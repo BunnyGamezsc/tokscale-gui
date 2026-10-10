@@ -91,10 +91,17 @@ To build for Intel from an Apple Silicon Mac (no Rosetta needed):
 
 ### The tokscale fork
 
-`src-tauri/Cargo.toml` pins `tokscale-core` to a git tag on the fork (currently
-`gui-v4.15.1-lib.2`). A `[patch]` section points it at the `vendor/tokscale` submodule so
-day-to-day work edits real files. When the fork moves, bump the tag and the submodule pointer
-together. See ADR 0001 and ADR 0002.
+The fork includes Tokscale v4.18.0 and upstream commit `1ddc6241`, plus the GUI's
+library entry points, GPT-6.1 Sol pricing selection, and pricing reload API.
+`src-tauri/Cargo.toml` pins both engine crates to `gui-v4.18.0-lib.1`. A `[patch]`
+section compiles the checked-out `vendor/tokscale` submodule during development.
+
+Submodules pin a commit; they do not automatically follow the latest TUI release.
+To upgrade, merge upstream into the fork, preserve the GUI library entry points,
+run the engine and GUI checks, publish an immutable fork tag, then update both
+Cargo tags, the lockfile, and the submodule pointer together. The separately
+installed `tokscale` TUI does not select the GUI's engine version. See ADR 0001
+and ADR 0002.
 
 ## Limitations
 

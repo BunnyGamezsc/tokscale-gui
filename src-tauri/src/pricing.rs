@@ -14,9 +14,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tokscale_core::pricing::custom::CustomPricing;
 use tokscale_core::pricing::PricingService;
-use tokscale_core::pricing::{litellm, models_dev, openrouter};
 
 /// The four rates the GUI edits, in dollars per million tokens.
 ///
@@ -202,29 +200,208 @@ pub(crate) fn write_json(final_path: &std::path::Path, doc: &Value) -> Result<()
         .map_err(|e| format!("{} could not be replaced: {e}", final_path.display()))
 }
 
-/// A pricing service that has just re-read the manual overrides.
-///
-/// `PricingService::get_or_init` caches in a process-wide `OnceCell`, so it
-/// reads `custom-pricing.json` exactly once per launch. After an edit that
-/// cached service is stale, and a rescan through it would show the old cost. So
-/// a forced rescan builds a fresh service instead: freshly loaded overrides on
-/// top of the upstream datasets already cached on disk by the first scan.
-///
-/// Returns `None` before those caches exist, in which case the caller falls
-/// back to `get_or_init` and fetches them.
-pub fn reloaded() -> Option<PricingService> {
-    let litellm = litellm::load_cached_any_age()?;
-    Some(PricingService::new_with_custom_and_models_dev(
-        CustomPricing::load_from_default_path(),
-        litellm,
-        openrouter::load_cached_any_age().unwrap_or_default(),
-        models_dev::load_cached_any_age().unwrap_or_default(),
-    ))
+/// Use core's fetch/cache policy while re-reading manual overrides each scan.
+pub async fn reloaded() -> Result<PricingService, String> {
+    PricingService::reload().await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokscale_core::pricing::custom::CustomPricing;
+
+    #[test]
+    fn reload_keeps_custom_edits_live_and_filters_subscription_rates() {
+        const CHILD: &str = "TOKSCALE_GUI_PRICING_RELOAD_TEST";
+        if std::env::var_os(CHILD).is_some() {
+            let config = tokscale_core::paths::get_config_dir();
+            let custom_path = config.join("custom-pricing.json");
+            let write_rate = |rate| {
+                std::fs::write(
+                    &custom_path,
+                    serde_json::json!({
+                        "models": { "gui-test-model": {
+                            "input_cost_per_million_tokens": rate
+                        }}
+                    })
+                    .to_string(),
+                )
+                .unwrap();
+            };
+            let usage = tokscale_core::TokenBreakdown {
+                input: 100_000,
+                ..Default::default()
+            };
+            for rate in [2.0, 4.0] {
+                write_rate(rate);
+                let pricing = tauri::async_runtime::block_on(reloaded()).unwrap();
+                let cost = pricing.calculate_cost_with_provider("gui-test-model", None, &usage);
+                assert!((cost - rate / 10.0).abs() < 1e-10);
+                assert!(pricing
+                    .lookup_with_source("github_copilot/gui-subscription-model", Some("litellm"))
+                    .is_none());
+            }
+
+            // Compare the GUI reload path with the TUI's shared service across
+            // provider families, including Claude cache writes of both TTLs.
+            let tui = tauri::async_runtime::block_on(PricingService::get_or_init()).unwrap();
+            let gui = tauri::async_runtime::block_on(reloaded()).unwrap();
+            let mixed_usage = tokscale_core::TokenBreakdown {
+                input: 10_000,
+                output: 1_000,
+                cache_read: 100_000,
+                cache_write: 10_000,
+                cache_write_1h: 2_000,
+                ..Default::default()
+            };
+            for (provider, model) in [
+                ("anthropic", "claude-opus-5"),
+                ("anthropic", "anthropic/claude-opus-5"),
+                ("anthropic", "claude-sonnet-4-6"),
+                ("openai", "gpt-5.3-codex"),
+                ("google", "gemini-2.5-pro"),
+                ("xai", "grok-4"),
+            ] {
+                for input in [10_000, 300_000] {
+                    let usage = tokscale_core::TokenBreakdown {
+                        input,
+                        ..mixed_usage.clone()
+                    };
+                    let expected = tui.calculate_cost_with_provider(model, Some(provider), &usage);
+                    let actual = gui.calculate_cost_with_provider(model, Some(provider), &usage);
+                    assert!(expected > 0.0, "fixture must resolve {model}");
+                    assert!(
+                        (actual - expected).abs() < 1e-10,
+                        "GUI/TUI differ for {model}"
+                    );
+                }
+            }
+            let opus =
+                gui.calculate_cost_with_provider("claude-opus-5", Some("anthropic"), &mixed_usage);
+            // 5/M input, 25/M output, .5/M reads, 6.25/M 5m writes,
+            // 10/M 1h writes. The 1h count is a subset of total writes.
+            assert!(
+                (opus - 0.195).abs() < 1e-10,
+                "Opus cache accounting: {opus}"
+            );
+            return;
+        }
+
+        // A subprocess isolates the config override from other parallel tests.
+        let config =
+            std::env::temp_dir().join(format!("tokscale-gui-reload-{}", std::process::id()));
+        let cache = config.join("cache");
+        std::fs::create_dir_all(&cache).unwrap();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        for (filename, data) in [
+            (
+                "pricing-litellm.json",
+                serde_json::json!({
+                    "github_copilot/gui-subscription-model": {
+                        "input_cost_per_token": 0.0,
+                        "output_cost_per_token": 0.0
+                    },
+                    "claude-opus-5": {
+                        "input_cost_per_token": 5e-6,
+                        "output_cost_per_token": 25e-6,
+                        "cache_read_input_token_cost": 0.5e-6,
+                        "cache_creation_input_token_cost": 6.25e-6,
+                        "cache_creation_input_token_cost_above_1hr": 10e-6
+                    },
+                    "claude-sonnet-4-6": { "input_cost_per_token": 3e-6 },
+                    "gpt-5.3-codex": { "input_cost_per_token": 1.75e-6 },
+                    "gemini-2.5-pro": { "input_cost_per_token": 1.25e-6 },
+                    "xai/grok-4": { "input_cost_per_token": 3e-6 }
+                }),
+            ),
+            ("pricing-openrouter.json", serde_json::json!({})),
+            ("pricing-models-dev.json", serde_json::json!({})),
+        ] {
+            std::fs::write(
+                cache.join(filename),
+                serde_json::json!({
+                    "timestamp": timestamp, "data": data
+                })
+                .to_string(),
+            )
+            .unwrap();
+        }
+        let result = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "pricing::tests::reload_keeps_custom_edits_live_and_filters_subscription_rates",
+            ])
+            .env(CHILD, "1")
+            .env("TOKSCALE_CONFIG_DIR", &config)
+            .output()
+            .unwrap();
+        std::fs::remove_dir_all(config).unwrap();
+        assert!(
+            result.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+
+    /// Codex bills OpenAI directly. A cheaper OpenRouter listing must not
+    /// replace the direct provider's rates when the GUI reloads pricing.
+    #[test]
+    fn direct_openai_sol_pricing_matches_tui() {
+        use std::collections::HashMap;
+        use tokscale_core::{pricing::ModelPricing, TokenBreakdown};
+
+        for (model, cache_rate) in [("gpt-6-sol", 0.2e-6), ("gpt-6.1-sol", 0.1e-6)] {
+            let direct = ModelPricing {
+                input_cost_per_token: Some(2e-6),
+                output_cost_per_token: Some(10e-6),
+                cache_read_input_token_cost: Some(cache_rate),
+                input_cost_per_token_above_272k_tokens: Some(4e-6),
+                output_cost_per_token_above_272k_tokens: Some(15e-6),
+                cache_read_input_token_cost_above_272k_tokens: Some(cache_rate * 2.0),
+                ..Default::default()
+            };
+            let router = ModelPricing {
+                input_cost_per_token: Some(1e-6),
+                output_cost_per_token: Some(5e-6),
+                cache_read_input_token_cost: Some(cache_rate / 2.0),
+                ..Default::default()
+            };
+            let service = PricingService::new(
+                HashMap::from([(model.to_owned(), direct)]),
+                HashMap::from([(format!("openai/{model}"), router)]),
+            );
+            let usage = TokenBreakdown {
+                input: 10_000,
+                cache_read: 100_000,
+                output: 1_000,
+                reasoning: 500,
+                ..Default::default()
+            };
+            let expected = 10_000.0 * 2e-6 + 100_000.0 * cache_rate + 1_500.0 * 10e-6;
+            let actual = service.calculate_cost_with_provider(model, Some("openai"), &usage);
+            assert!(
+                (actual - expected).abs() < 1e-10,
+                "{model}: expected {expected}, got {actual}"
+            );
+
+            // Cached input counts toward the request-wide 272K threshold.
+            let long_usage = TokenBreakdown {
+                cache_read: 270_000,
+                ..usage
+            };
+            let expected_long = 10_000.0 * 4e-6 + 270_000.0 * cache_rate * 2.0 + 1_500.0 * 15e-6;
+            let actual_long =
+                service.calculate_cost_with_provider(model, Some("openai"), &long_usage);
+            assert!(
+                (actual_long - expected_long).abs() < 1e-10,
+                "{model} long context: expected {expected_long}, got {actual_long}"
+            );
+        }
+    }
 
     /// The whole feature hinges on these four key names being the ones core
     /// reads. If they drift — a fork bump renames one, or a typo slips in — the

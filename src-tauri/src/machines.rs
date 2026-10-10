@@ -182,6 +182,7 @@ pub(crate) fn messages_of(document: &MachineExport) -> Vec<UnifiedMessage> {
                 output: bucket.output,
                 cache_read: bucket.cache_read,
                 cache_write: bucket.cache_write,
+                cache_write_1h: 0,
                 reasoning: 0,
             },
             cost: bucket.cost,
@@ -196,6 +197,8 @@ pub(crate) fn messages_of(document: &MachineExport) -> Vec<UnifiedMessage> {
             session_title: None,
             is_turn_start: false,
             model_attribution_conflicted: false,
+            service_tier: None,
+            parent_session_id: None,
         })
         .collect()
 }
@@ -489,6 +492,8 @@ mod tests {
             session_title: None,
             is_turn_start: false,
             model_attribution_conflicted: false,
+            service_tier: None,
+            parent_session_id: None,
         };
         message.tokens.input = input;
         message

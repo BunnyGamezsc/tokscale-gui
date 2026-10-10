@@ -229,6 +229,8 @@ mod tests {
             session_title: Some("Chat".into()),
             is_turn_start: false,
             model_attribution_conflicted: false,
+            service_tier: None,
+            parent_session_id: None,
         }
     }
     #[test]

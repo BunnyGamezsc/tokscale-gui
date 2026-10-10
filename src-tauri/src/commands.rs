@@ -12,7 +12,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 #[cfg(test)]
-use tokscale_core::generate_local_graph_report;
+use tokscale_core::{generate_local_graph_report, TokenBreakdown};
 use tokscale_core::{
     aggregate_model_usage_entries_with_rollup, filter_messages_for_report,
     model_report_token_totals, parse_local_unified_messages_with_pricing, pricing::PricingService,
@@ -215,19 +215,13 @@ pub async fn scan(
 pub(crate) async fn priced_parse(
     options: LocalParseOptions,
 ) -> Result<Vec<UnifiedMessage>, String> {
-    // A forced rescan re-reads the manual pricing overrides. The cached
-    // service would not: it reads `custom-pricing.json` once per launch,
-    // so a rate entered in this session would not show up until restart.
-    match crate::pricing::reloaded() {
-        Some(fresh) => parse_local_unified_messages_with_pricing(options, Some(&fresh)).await,
-        None => {
-            // No upstream pricing cached on disk yet, so this is the
-            // first scan: fetch through the shared service, which also
-            // populates those caches for the branch above.
-            let pricing = PricingService::get_or_init().await.ok();
-            parse_local_unified_messages_with_pricing(options, pricing.as_deref()).await
-        }
-    }
+    // Reload through core so cache expiry, source filtering and manual edits
+    // follow the same pricing path as the TUI.
+    let pricing = crate::pricing::reloaded()
+        .await
+        .ok()
+        .or_else(PricingService::load_cached_any_age);
+    parse_local_unified_messages_with_pricing(options, pricing.as_ref()).await
 }
 
 /// Re-aggregates the held Snapshot under a Group-By and Report Filter.
@@ -765,11 +759,7 @@ mod tests {
     //! Ramp bucketing without running a Scan.
 
     use super::*;
-    use tokscale_core::TokenBreakdown;
 
-    /// Ticket 28: the first-run window names what is being read, so the list it
-    /// names has to be the list a Scan actually walks. Both sides come from the
-    /// same registry; what this pins is the predicate and the omission.
     #[test]
     fn the_catalog_names_every_client_a_scan_reads() {
         let catalog = client_catalog();
@@ -783,8 +773,9 @@ mod tests {
         assert!(catalog.contains(&ClientId::Cursor.display_name().to_string()));
         // `synthetic` is core's pseudo-source, not a place on disk to look.
         assert!(!catalog.iter().any(|c| c.eq_ignore_ascii_case("synthetic")));
-        // All 53 of core's declared Clients.
-        assert_eq!(catalog.len(), 53);
+        assert!(ClientId::iter()
+            .filter(|client| client.parse_local())
+            .all(|client| catalog.contains(&client.display_name().to_string())));
     }
 
     fn msg(client: &str, model: &str, date: &str, cost: f64) -> UnifiedMessage {
@@ -802,6 +793,7 @@ mod tests {
                 output: 10,
                 cache_read: 0,
                 cache_write: 0,
+                cache_write_1h: 0,
                 reasoning: 0,
             },
             cost,
@@ -813,6 +805,8 @@ mod tests {
             session_title: None,
             is_turn_start: false,
             model_attribution_conflicted: false,
+            service_tier: None,
+            parent_session_id: None,
         }
     }
 
