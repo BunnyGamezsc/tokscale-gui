@@ -1,0 +1,50 @@
+name: macOS release assets
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag
+        required: true
+      blob:
+        description: Git blob containing the signed macOS asset archive
+        required: true
+      sha256:
+        description: SHA-256 of the asset archive
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      ASSET_BLOB: ${{ inputs.blob }}
+      ASSET_SHA256: ${{ inputs.sha256 }}
+    steps:
+      - name: Download and verify signed release assets
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$ASSET_BLOB" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ASSET_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null
+          gh api "repos/$GH_REPO/git/blobs/$ASSET_BLOB" --jq .content | base64 --decode > assets.zip
+          printf '%s  assets.zip\n' "$ASSET_SHA256" | sha256sum --check
+          python3 - <<'PY'
+          import os, pathlib, zipfile
+          version = os.environ['RELEASE_TAG'][1:]
+          expected = {'appcast.xml', 'macos.sha256'} | {
+              f'Tokscale-{version}-macos-{arch}.{ext}'
+              for arch in ['arm64', 'x86_64'] for ext in ['zip', 'html']
+          }
+          with zipfile.ZipFile('assets.zip') as archive:
+              assert set(archive.namelist()) == expected
+              assert len(archive.infolist()) == len(expected)
+              archive.extractall('out')
+          PY
+          (cd out && sha256sum --check macos.sha256)
+      - name: Upload to the existing release
+        run: gh release upload "$RELEASE_TAG" out/* --clobber --repo "$GH_REPO"
